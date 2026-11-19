@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Antigravity mascot - standing idle" shape-rendering="crispEdges">
+<title>Antigravity mascot - standing idle</title>
+
+<defs>
+  <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#b66cff"/>
+    <stop offset="1" stop-color="#55d9ff"/>
+  </linearGradient>
+  <linearGradient id="earGlow" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#a86bff"/>
+    <stop offset="1" stop-color="#78cfff"/>
+  </linearGradient>
+</defs>
+
+
+<!-- tail -->
+<path d="M166 174h22v-10h18v10h10v18h-10v18h-18v10h-20v-10h-10v-18h10z" fill="#242131" stroke="#090812" stroke-width="6"/>
+<path d="M184 178h18v12h-10v16h-14v-12h6z" fill="url(#accent)"/>
+<!-- ears and head -->
+<path d="M63 83V43h22V29h22v14h20v-9h22v12h22v37h13v45h-13v22h-18v13H79v-13H61v-22H48V96h15z" fill="#242131" stroke="#090812" stroke-width="7"/>
+<path d="M73 76V48h14v-9h12v20h12v17z" fill="url(#earGlow)"/>
+<path d="M143 76V59h12V39h13v10h12v27z" fill="url(#earGlow)"/>
+<!-- face mask -->
+<path d="M76 101h104v42h-13v13H88v-13H76z" fill="#090812"/>
+<rect x="99" y="112" width="9" height="20" fill="#b98aff"/>
+<rect x="148" y="112" width="9" height="20" fill="#8bdcff"/>
+<!-- hoodie -->
+<path d="M79 158h98v18h18v53h-20v12H81v-12H61v-53h18z" fill="#242131" stroke="#090812" stroke-width="7"/>
+<path d="M103 159h50v17h-10v18h-30v-18h-10z" fill="#171522" stroke="#090812" stroke-width="5"/>
+<path d="M116 198h12v-10h10v10h12v10h-12v10h-10v-10h-12z" fill="url(#accent)"/>
+<!-- arms and legs -->
+<path d="M68 178H53v39h15v10h20v-18H78v-20H68zM177 178h15v39h-15v10h-20v-18h10v-20h10z" fill="#242131" stroke="#090812" stroke-width="6"/>
+<path d="M88 220h28v18H82v-8h6zM143 220h28v18h-34v-8h6z" fill="#242131" stroke="#090812" stroke-width="6"/>
+
+</svg>

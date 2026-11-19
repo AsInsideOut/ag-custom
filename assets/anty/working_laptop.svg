@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Antigravity mascot - working at laptop" shape-rendering="crispEdges">
+<title>Antigravity mascot - working at laptop</title>
+
+<defs>
+  <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#b66cff"/>
+    <stop offset="1" stop-color="#55d9ff"/>
+  </linearGradient>
+  <linearGradient id="earGlow" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#a86bff"/>
+    <stop offset="1" stop-color="#78cfff"/>
+  </linearGradient>
+</defs>
+
+
+<!-- tail -->
+<path d="M174 177h18v-10h17v10h12v19h-12v17h-18v10h-20v-10h-9v-19h12z" fill="#242131" stroke="#090812" stroke-width="6"/>
+<path d="M189 180h14v13h-8v15h-13v-12h7z" fill="url(#accent)"/>
+<!-- body -->
+<path d="M74 156h104v18h16v44h-17v15H81v-12H63v-47h11z" fill="#242131" stroke="#090812" stroke-width="7"/>
+<!-- head -->
+<path d="M67 91V54h21V38h22v16h40V38h23v16h17v37h13v40h-15v17H69v-17H53V91z" fill="#242131" stroke="#090812" stroke-width="7"/>
+<path d="M79 81V59h13V47h12v34zM157 81V47h12v12h13v22z" fill="url(#earGlow)"/>
+<!-- focused eyes -->
+<rect x="91" y="103" width="10" height="20" fill="#b98aff"/>
+<rect x="151" y="103" width="10" height="20" fill="#8bdcff"/>
+<!-- laptop -->
+<path d="M91 158h93v57H91z" fill="#11101a" stroke="#090812" stroke-width="7"/>
+<path d="M99 166h77v40H99z" fill="#29243d"/>
+<path d="M125 179h12v-8h10v8h12v9h-12v9h-10v-9h-12z" fill="url(#accent)"/>
+<path d="M78 216h122l-10 12H89z" fill="#38334b" stroke="#090812" stroke-width="5"/>
+<!-- paws on keyboard -->
+<path d="M81 198h22v15H88v8H75v-14h6zM173 198h22v15h-15v8h-13v-14h6z" fill="#242131" stroke="#090812" stroke-width="5"/>
+<!-- activity sparkles -->
+<path d="M38 73h10v10H38zM28 83h10v10H28zM213 67h10v10h-10zM223 57h10v10h-10z" fill="url(#accent)"/>
+
+</svg>

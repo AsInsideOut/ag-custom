@@ -155,6 +155,9 @@ const DEFAULT_CONFIG = {
   fabHotkey: 'Alt+KeyS',
   fabLeft: null,
   fabTop: null,
+  antyEnabled: true,
+  antyRoam: true,
+  antySize: 58,
 };
 
 let activeLocalBlobUrl = '';
@@ -689,6 +692,159 @@ function injectStyles(cfg) {
       padding-top: 10px;
       border-top: 1px solid rgba(255, 255, 255, 0.08);
     }
+
+    /* Anty Mascot */
+    #qusa-anty {
+      position: fixed;
+      z-index: 99990;
+      width: ${cfg.antySize || 58}px;
+      height: ${cfg.antySize || 58}px;
+      display: ${cfg.antyEnabled !== false ? 'block' : 'none'};
+      user-select: none;
+      cursor: grab;
+      pointer-events: auto;
+      will-change: left, top;
+      filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.45));
+    }
+    #qusa-anty:active {
+      cursor: grabbing;
+    }
+    #qusa-anty-flip {
+      width: 100%;
+      height: 100%;
+      transition: transform 0.16s ease;
+    }
+    #qusa-anty[data-dir="left"] #qusa-anty-flip {
+      transform: scaleX(-1);
+    }
+    #qusa-anty-sprite {
+      width: 100%;
+      height: 100%;
+      transform-origin: center bottom;
+    }
+    #qusa-anty-sprite svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+      image-rendering: pixelated;
+    }
+    #qusa-anty[data-state="idle"] #qusa-anty-sprite {
+      animation: none;
+    }
+    #qusa-anty[data-state="walking"] #qusa-anty-sprite {
+      animation: qusa-anty-walk 0.36s steps(2, end) infinite;
+    }
+    #qusa-anty[data-state="walking"] .anty-leg-l {
+      animation: qusa-anty-step-l 0.36s steps(2, end) infinite;
+    }
+    #qusa-anty[data-state="walking"] .anty-leg-r {
+      animation: qusa-anty-step-r 0.36s steps(2, end) infinite;
+    }
+    #qusa-anty[data-state="walking"] .anty-arm-l {
+      animation: qusa-anty-arm-l 0.36s steps(2, end) infinite;
+    }
+    #qusa-anty[data-state="walking"] .anty-arm-r {
+      animation: qusa-anty-arm-r 0.36s steps(2, end) infinite;
+    }
+    #qusa-anty[data-state="walking"] .anty-tail {
+      animation: qusa-anty-tail 0.36s steps(2, end) infinite;
+    }
+    #qusa-anty[data-state="working"] #qusa-anty-sprite {
+      animation: qusa-anty-work 0.45s ease-in-out infinite;
+    }
+    #qusa-anty[data-state="asking"] #qusa-anty-sprite {
+      animation: qusa-anty-curious 1.8s ease-in-out infinite;
+    }
+    #qusa-anty[data-state="completed"] #qusa-anty-sprite {
+      animation: qusa-anty-happy 0.55s ease-in-out infinite;
+    }
+    #qusa-anty[data-state="sleeping"] #qusa-anty-sprite {
+      animation: qusa-anty-sleep 3.2s ease-in-out infinite;
+    }
+    #qusa-anty[data-state="petting"] #qusa-anty-sprite {
+      animation: qusa-anty-pet 0.38s ease-in-out infinite;
+    }
+    .qusa-anty-heart {
+      position: absolute;
+      pointer-events: none;
+      font-size: 13px;
+      line-height: 1;
+      color: #ff75bd;
+      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+      animation: qusa-anty-heart-rise 0.95s ease-out forwards;
+      z-index: 2;
+    }
+    #qusa-anty-bubble {
+      position: absolute;
+      bottom: calc(100% + 2px);
+      left: 50%;
+      transform: translateX(-50%) translateY(4px);
+      background: rgba(16, 18, 28, 0.92);
+      color: #f1f5f9;
+      border: 1px solid rgba(182, 108, 255, 0.38);
+      border-radius: 10px;
+      padding: 3px 8px;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.18s ease, transform 0.18s ease;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+    }
+    #qusa-anty-bubble.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    @keyframes qusa-anty-walk {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-3px); }
+    }
+    @keyframes qusa-anty-step-l {
+      0%, 100% { transform: translate(-6px, -10px); }
+      50% { transform: translate(7px, 0); }
+    }
+    @keyframes qusa-anty-step-r {
+      0%, 100% { transform: translate(7px, 0); }
+      50% { transform: translate(-6px, -10px); }
+    }
+    @keyframes qusa-anty-arm-l {
+      0%, 100% { transform: translate(5px, -4px); }
+      50% { transform: translate(-5px, 3px); }
+    }
+    @keyframes qusa-anty-arm-r {
+      0%, 100% { transform: translate(-5px, 3px); }
+      50% { transform: translate(5px, -4px); }
+    }
+    @keyframes qusa-anty-tail {
+      0%, 100% { transform: translateY(-5px); }
+      50% { transform: translateY(3px); }
+    }
+    @keyframes qusa-anty-work {
+      0%, 100% { transform: translateY(0) rotate(-1.5deg); }
+      50% { transform: translateY(-2px) rotate(1.5deg); }
+    }
+    @keyframes qusa-anty-curious {
+      0%, 100% { transform: rotate(-4deg) translateY(0); }
+      50% { transform: rotate(4deg) translateY(-2px); }
+    }
+    @keyframes qusa-anty-happy {
+      0%, 100% { transform: translateY(0) scale(1); }
+      45% { transform: translateY(-9px) scale(1.06); }
+    }
+    @keyframes qusa-anty-sleep {
+      0%, 100% { transform: scaleY(1) scaleX(1); }
+      50% { transform: scaleY(0.95) scaleX(1.03); }
+    }
+    @keyframes qusa-anty-pet {
+      0%, 100% { transform: scaleX(1.06) scaleY(0.91) rotate(-4deg); }
+      50% { transform: scaleX(1.08) scaleY(0.89) rotate(4deg); }
+    }
+    @keyframes qusa-anty-heart-rise {
+      0% { opacity: 1; transform: translate(-50%, 0) scale(0.8); }
+      100% { opacity: 0; transform: translate(-50%, -32px) scale(1.25); }
+    }
   `;
 
   const dot = document.getElementById('qusa-fab-dot');
@@ -752,7 +908,7 @@ function applySurfaceColors(cfg) {
   const els = document.querySelectorAll('div, main, section, aside, nav, header, footer, pre, form');
   for (const el of els) {
     if (el.id && el.id.startsWith('qusa-')) continue;
-    if (el.closest('#qusa-theme-modal, #qusa-style-fab, #qusa-telemetry-bar, #qusa-bg-layer')) continue;
+    if (el.closest('#qusa-theme-modal, #qusa-style-fab, #qusa-telemetry-bar, #qusa-bg-layer, #qusa-anty')) continue;
     if (el.matches(INTERACTIVE_SELECTOR)) continue;
 
     let origStr = el.getAttribute('data-qusa-orig-bg');
@@ -909,7 +1065,7 @@ function applyAccountNameToString(raw, customName, parentEl) {
 
 function shouldSkipTextNode(el) {
   if (!el) return true;
-  if (el.closest && el.closest('pre, code, .prose, [contenteditable="true"], [data-lexical-editor], [data-testid*="drag"], [data-qusa-skip], #qusa-theme-modal, #qusa-style-fab, #qusa-telemetry-bar')) {
+  if (el.closest && el.closest('pre, code, .prose, [contenteditable="true"], [data-lexical-editor], [data-testid*="drag"], [data-qusa-skip], #qusa-theme-modal, #qusa-style-fab, #qusa-telemetry-bar, #qusa-anty')) {
     return true;
   }
   return false;
@@ -1194,6 +1350,24 @@ function createStyleUI(cfg) {
           </div>
         </div>
 
+        <details class="qusa-details" id="qusa-anty-details">
+          <summary>Маскот Anty (сидит на промпте и гуляет)</summary>
+          <div class="qusa-wp-box">
+            <div class="qusa-row" style="border-top:none;padding-top:0;">
+              <span>Включить маскота Anty</span>
+              <input type="checkbox" id="qusa-anty-toggle" />
+            </div>
+            <div class="qusa-row">
+              <span>Гулять по интерфейсу</span>
+              <input type="checkbox" id="qusa-anty-roam-toggle" />
+            </div>
+            <div class="qusa-field" style="margin-bottom:0;">
+              <label><span>Размер Anty</span><span id="qusa-anty-size-val"></span></label>
+              <input type="range" id="qusa-anty-size-range" min="36" max="96" step="2" />
+            </div>
+          </div>
+        </details>
+
         <details class="qusa-details" id="qusa-models-details">
           <summary>Переименование моделей (визуально)</summary>
           <div class="qusa-models-list" id="qusa-models-list"></div>
@@ -1245,6 +1419,10 @@ function createStyleUI(cfg) {
     const hotkeyResetBtn = document.getElementById('qusa-hotkey-reset-btn');
     const accountNameInput = document.getElementById('qusa-account-name');
     const accountResetBtn = document.getElementById('qusa-account-reset-btn');
+    const antyToggle = document.getElementById('qusa-anty-toggle');
+    const antyRoamToggle = document.getElementById('qusa-anty-roam-toggle');
+    const antySizeRange = document.getElementById('qusa-anty-size-range');
+    const antySizeVal = document.getElementById('qusa-anty-size-val');
     const resetBtn = document.getElementById('qusa-reset-btn');
     const resetModelsBtn = document.getElementById('qusa-reset-models-btn');
     const customFrom = document.getElementById('qusa-custom-from');
@@ -1359,6 +1537,10 @@ function createStyleUI(cfg) {
       fabHiddenToggle.checked = Boolean(cfg.fabHidden);
       hotkeyBtn.textContent = formatHotkey(cfg.fabHotkey || 'Alt+KeyS');
       accountNameInput.value = cfg.customAccountName || '';
+      antyToggle.checked = cfg.antyEnabled !== false;
+      antyRoamToggle.checked = cfg.antyRoam !== false;
+      antySizeRange.value = String(cfg.antySize || 58);
+      antySizeVal.textContent = `${cfg.antySize || 58}px`;
       renderPresets();
       renderModelsList();
       updateWpStatusText();
@@ -1549,6 +1731,25 @@ function createStyleUI(cfg) {
       applyTextTransforms(document.body, cfg);
     });
 
+    antyToggle.addEventListener('change', () => {
+      cfg.antyEnabled = antyToggle.checked;
+      applyAll(true);
+      if (window.__qusaUpdateAnty) window.__qusaUpdateAnty(cfg);
+    });
+
+    antyRoamToggle.addEventListener('change', () => {
+      cfg.antyRoam = antyRoamToggle.checked;
+      saveConfig(cfg, true);
+      if (window.__qusaUpdateAnty) window.__qusaUpdateAnty(cfg);
+    });
+
+    antySizeRange.addEventListener('input', () => {
+      cfg.antySize = parseInt(antySizeRange.value, 10);
+      antySizeVal.textContent = `${cfg.antySize}px`;
+      applyAll(false);
+      if (window.__qusaUpdateAnty) window.__qusaUpdateAnty(cfg);
+    });
+
     customAddBtn.addEventListener('click', () => {
       const from = customFrom.value.trim();
       const to = customTo.value.trim();
@@ -1580,6 +1781,440 @@ function createStyleUI(cfg) {
   }
 }
 
+// --- Anty Mascot (Clawd-style animated companion) ---
+
+const ANTY_SVGS = {
+  idle: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" shape-rendering="crispEdges"><defs><linearGradient id="anty-acc-idle" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b66cff"/><stop offset="1" stop-color="#55d9ff"/></linearGradient><linearGradient id="anty-ear-idle" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a86bff"/><stop offset="1" stop-color="#78cfff"/></linearGradient></defs><path d="M166 174h22v-10h18v10h10v18h-10v18h-18v10h-20v-10h-10v-18h10z" fill="#242131" stroke="#090812" stroke-width="6"/><path d="M184 178h18v12h-10v16h-14v-12h6z" fill="url(#anty-acc-idle)"/><path d="M63 83V43h22V29h22v14h20v-9h22v12h22v37h13v45h-13v22h-18v13H79v-13H61v-22H48V96h15z" fill="#242131" stroke="#090812" stroke-width="7"/><path d="M73 76V48h14v-9h12v20h12v17z" fill="url(#anty-ear-idle)"/><path d="M143 76V59h12V39h13v10h12v27z" fill="url(#anty-ear-idle)"/><path d="M76 101h104v42h-13v13H88v-13H76z" fill="#090812"/><rect x="99" y="112" width="9" height="20" fill="#b98aff"/><rect x="148" y="112" width="9" height="20" fill="#8bdcff"/><path d="M79 158h98v18h18v53h-20v12H81v-12H61v-53h18z" fill="#242131" stroke="#090812" stroke-width="7"/><path d="M103 159h50v17h-10v18h-30v-18h-10z" fill="#171522" stroke="#090812" stroke-width="5"/><path d="M116 198h12v-10h10v10h12v10h-12v10h-10v-10h-12z" fill="url(#anty-acc-idle)"/><path d="M68 178H53v39h15v10h20v-18H78v-20H68zM177 178h15v39h-15v10h-20v-18h10v-20h10z" fill="#242131" stroke="#090812" stroke-width="6"/><path d="M88 220h28v18H82v-8h6zM143 220h28v18h-34v-8h6z" fill="#242131" stroke="#090812" stroke-width="6"/></svg>`,
+  walking: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" shape-rendering="crispEdges"><defs><linearGradient id="anty-acc-walk" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b66cff"/><stop offset="1" stop-color="#55d9ff"/></linearGradient><linearGradient id="anty-ear-walk" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a86bff"/><stop offset="1" stop-color="#78cfff"/></linearGradient></defs><g class="anty-tail"><path d="M166 174h22v-10h18v10h10v18h-10v18h-18v10h-20v-10h-10v-18h10z" fill="#242131" stroke="#090812" stroke-width="6"/><path d="M184 178h18v12h-10v16h-14v-12h6z" fill="url(#anty-acc-walk)"/></g><g class="anty-leg-l"><path d="M88 220h28v18H82v-8h6z" fill="#242131" stroke="#090812" stroke-width="6"/></g><g class="anty-leg-r"><path d="M143 220h28v18h-34v-8h6z" fill="#242131" stroke="#090812" stroke-width="6"/></g><path d="M63 83V43h22V29h22v14h20v-9h22v12h22v37h13v45h-13v22h-18v13H79v-13H61v-22H48V96h15z" fill="#242131" stroke="#090812" stroke-width="7"/><path d="M73 76V48h14v-9h12v20h12v17z" fill="url(#anty-ear-walk)"/><path d="M143 76V59h12V39h13v10h12v27z" fill="url(#anty-ear-walk)"/><path d="M76 101h104v42h-13v13H88v-13H76z" fill="#090812"/><rect x="99" y="112" width="9" height="20" fill="#b98aff"/><rect x="148" y="112" width="9" height="20" fill="#8bdcff"/><path d="M79 158h98v18h18v53h-20v12H81v-12H61v-53h18z" fill="#242131" stroke="#090812" stroke-width="7"/><path d="M103 159h50v17h-10v18h-30v-18h-10z" fill="#171522" stroke="#090812" stroke-width="5"/><path d="M116 198h12v-10h10v10h12v10h-12v10h-10v-10h-12z" fill="url(#anty-acc-walk)"/><g class="anty-arm-l"><path d="M68 178H53v39h15v10h20v-18H78v-20H68z" fill="#242131" stroke="#090812" stroke-width="6"/></g><g class="anty-arm-r"><path d="M177 178h15v39h-15v10h-20v-18h10v-20h10z" fill="#242131" stroke="#090812" stroke-width="6"/></g></svg>`,
+  sleeping: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" shape-rendering="crispEdges"><defs><linearGradient id="anty-acc-sleep" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b66cff"/><stop offset="1" stop-color="#55d9ff"/></linearGradient><linearGradient id="anty-ear-sleep" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a86bff"/><stop offset="1" stop-color="#78cfff"/></linearGradient></defs><path d="M163 174h22v-12h18v12h13v19h-10v20h-18v10h-25v-10h-12v-20h12z" fill="#242131" stroke="#090812" stroke-width="7"/><path d="M181 178h18v13h-10v16h-17v-12h9z" fill="url(#anty-acc-sleep)"/><path d="M71 164h104v18h20v34h-15v16H84v-10H64v-38h7z" fill="#242131" stroke="#090812" stroke-width="7"/><path d="M65 103V65h20V48h24v17h39V48h24v17h18v38h13v40h-16v15H68v-15H52v-40z" fill="#242131" stroke="#090812" stroke-width="7"/><path d="M77 91V69h13V57h12v34zM157 91V57h12v12h13v22z" fill="url(#anty-ear-sleep)"/><path d="M92 122h16v8H92zM145 122h16v8h-16z" fill="#b98aff"/><path d="M119 139h10v8h-10z" fill="#8bdcff"/><path d="M76 180h32v17H91v10H76zM143 180h32v17h-17v10h-15z" fill="#171522" stroke="#090812" stroke-width="5"/><path d="M193 54h20v7h-11v7h11v7h-20v-7h11v-7h-11z" fill="url(#anty-acc-sleep)"/><path d="M215 34h13v5h-7v5h7v5h-13v-5h7v-5h-7z" fill="#b98aff"/></svg>`,
+  working: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" shape-rendering="crispEdges"><defs><linearGradient id="anty-acc-work" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b66cff"/><stop offset="1" stop-color="#55d9ff"/></linearGradient><linearGradient id="anty-ear-work" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a86bff"/><stop offset="1" stop-color="#78cfff"/></linearGradient></defs><path d="M174 177h18v-10h17v10h12v19h-12v17h-18v10h-20v-10h-9v-19h12z" fill="#242131" stroke="#090812" stroke-width="6"/><path d="M189 180h14v13h-8v15h-13v-12h7z" fill="url(#anty-acc-work)"/><path d="M74 156h104v18h16v44h-17v15H81v-12H63v-47h11z" fill="#242131" stroke="#090812" stroke-width="7"/><path d="M67 91V54h21V38h22v16h40V38h23v16h17v37h13v40h-15v17H69v-17H53V91z" fill="#242131" stroke="#090812" stroke-width="7"/><path d="M79 81V59h13V47h12v34zM157 81V47h12v12h13v22z" fill="url(#anty-ear-work)"/><rect x="91" y="103" width="10" height="20" fill="#b98aff"/><rect x="151" y="103" width="10" height="20" fill="#8bdcff"/><path d="M91 158h93v57H91z" fill="#11101a" stroke="#090812" stroke-width="7"/><path d="M99 166h77v40H99z" fill="#29243d"/><path d="M125 179h12v-8h10v8h12v9h-12v9h-10v-9h-12z" fill="url(#anty-acc-work)"/><path d="M78 216h122l-10 12H89z" fill="#38334b" stroke="#090812" stroke-width="5"/><path d="M81 198h22v15H88v8H75v-14h6zM173 198h22v15h-15v8h-13v-14h6z" fill="#242131" stroke="#090812" stroke-width="5"/><path d="M38 73h10v10H38zM28 83h10v10H28zM213 67h10v10h-10zM223 57h10v10h-10z" fill="url(#anty-acc-work)"/></svg>`,
+  asking: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" shape-rendering="crispEdges"><defs><linearGradient id="anty-acc-ask" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b66cff"/><stop offset="1" stop-color="#55d9ff"/></linearGradient><linearGradient id="anty-ear-ask" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a86bff"/><stop offset="1" stop-color="#78cfff"/></linearGradient></defs><path d="M65 102V64h20V47h24v17h39V47h24v17h18v38h13v40h-16v15H68v-15H52v-40z" fill="#242131" stroke="#090812" stroke-width="7"/><path d="M77 91V68h13V56h12v35zM157 91V56h12v12h13v23z" fill="url(#anty-ear-ask)"/><rect x="91" y="111" width="10" height="19" fill="#b98aff"/><rect x="151" y="111" width="10" height="19" fill="#8bdcff"/><path d="M118 139h19v8h-19z" fill="#090812"/><path d="M78 158h100v18h18v48h-20v12H81v-12H61v-48h17z" fill="#242131" stroke="#090812" stroke-width="7"/><path d="M112 180h32v11h-10v14h-12v-14h-10z" fill="url(#anty-acc-ask)"/><path d="M61 176h19v15h10v18H70v-9H57v-16h4zM176 176h19v8h5v16h-13v9h-20v-18h9z" fill="#242131" stroke="#090812" stroke-width="6"/><path d="M186 23h48v39h-15v14h-15V62h-18z" fill="#171522" stroke="#090812" stroke-width="6"/><path d="M201 36h18v8h-8v7h-10v-8h8v-2h-8zM205 54h10v7h-10z" fill="url(#anty-acc-ask)"/></svg>`,
+  completed: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" shape-rendering="crispEdges"><defs><linearGradient id="anty-acc-done" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b66cff"/><stop offset="1" stop-color="#55d9ff"/></linearGradient><linearGradient id="anty-ear-done" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a86bff"/><stop offset="1" stop-color="#78cfff"/></linearGradient></defs><path d="M190 47h12V35h18v12h12v18h-12v12h-18V65h-12z" fill="#ff75bd" stroke="#090812" stroke-width="5"/><path d="M201 48h8v-6h7v8h8v8h-8v8h-7v-8h-8z" fill="#ffc0e1"/><path d="M165 178h20v-10h18v10h12v19h-12v18h-18v10h-20v-10h-10v-19h10z" fill="#242131" stroke="#090812" stroke-width="6"/><path d="M184 181h15v13h-9v14h-14v-12h8z" fill="url(#anty-acc-done)"/><path d="M79 157h99v18h18v44h-20v14H84v-12H63v-46h16z" fill="#242131" stroke="#090812" stroke-width="7"/><path d="M65 95V58h20V42h24v16h39V42h24v16h18v37h13v40h-16v16H68v-16H52V95z" fill="#242131" stroke="#090812" stroke-width="7"/><path d="M77 84V62h13V50h12v34zM157 84V50h12v12h13v22z" fill="url(#anty-ear-done)"/><path d="M91 111h10v7h10v8H99v-7h-8zM145 126h-10v-8h10v-7h10v8h-10z" fill="#b98aff"/><path d="M91 174h28v16h-10v12H91zM137 174h28v28h-18v-12h-10z" fill="#171522" stroke="#090812" stroke-width="5"/></svg>`,
+};
+
+function initAntyMascot(cfg) {
+  if (document.getElementById('qusa-anty')) return;
+
+  const root = document.createElement('div');
+  root.id = 'qusa-anty';
+  root.setAttribute('data-state', 'idle');
+  root.setAttribute('data-dir', 'right');
+  root.title = 'Anty (клик — погладить, перетащить — переместить, двойной клик — вернуть на промпт)';
+  root.innerHTML = `<div id="qusa-anty-bubble"></div><div id="qusa-anty-flip"><div id="qusa-anty-sprite">${ANTY_SVGS.idle}</div></div>`;
+  document.body.appendChild(root);
+
+  const spriteEl = document.getElementById('qusa-anty-sprite');
+  const bubbleEl = document.getElementById('qusa-anty-bubble');
+
+  let curState = 'idle';
+  let curSvgKey = 'idle';
+  let posX = window.innerWidth * 0.6;
+  let posY = window.innerHeight - 160;
+  let targetX = posX;
+  let targetY = posY;
+  let mode = 'perch'; // 'perch' | 'roam' | 'pinned'
+  let perchRatio = 0.78;
+  let isWalking = false;
+  let isDragging = false;
+  let dragMoved = false;
+  let lastActivityTs = Date.now();
+  let typingUntilTs = 0;
+  let celebrateUntilTs = 0;
+  let pettingUntilTs = 0;
+  let hoverStartTs = 0;
+  let isHovered = false;
+  let lastPetX = 0;
+  let lastPetDir = 0;
+  let petDistance = 0;
+  let petReversals = 0;
+  let lastHeartTs = 0;
+  let wasWorking = false;
+  let nextActionTs = Date.now() + 9000;
+  let roamReturnTs = 0;
+  let bubbleTimer = null;
+
+  const getSize = () => Number(cfg.antySize || 58);
+
+  const setBubble = (text, ms = 2200) => {
+    if (!bubbleEl) return;
+    bubbleEl.textContent = text;
+    bubbleEl.classList.add('show');
+    if (bubbleTimer) clearTimeout(bubbleTimer);
+    bubbleTimer = setTimeout(() => {
+      bubbleEl.classList.remove('show');
+    }, ms);
+  };
+
+  const setState = (state, svgKey) => {
+    if (curState !== state) {
+      curState = state;
+      root.setAttribute('data-state', state);
+    }
+    const key = svgKey || state;
+    if (curSvgKey !== key && ANTY_SVGS[key]) {
+      curSvgKey = key;
+      spriteEl.innerHTML = ANTY_SVGS[key];
+    }
+  };
+
+  const getComposerRect = () => {
+    const editors = document.querySelectorAll('[contenteditable="true"], textarea');
+    let editor = null;
+    for (const ed of editors) {
+      if (ed.closest('#qusa-theme-modal')) continue;
+      const r = ed.getBoundingClientRect();
+      if (r.width >= 150 && r.height >= 16) {
+        editor = ed;
+        break;
+      }
+    }
+    if (!editor) return null;
+    let cur = editor;
+    let best = null;
+    for (let i = 0; i < 8 && cur && cur !== document.body; i++) {
+      const r = cur.getBoundingClientRect();
+      if (r.width >= 260 && r.width <= window.innerWidth * 0.92 && r.height >= 44 && r.height <= 340) {
+        const cs = getComputedStyle(cur);
+        const br = parseFloat(cs.borderRadius) || 0;
+        if (cur.tagName === 'FORM' || br >= 10 || (cs.borderTopWidth && parseFloat(cs.borderTopWidth) >= 1)) {
+          best = r;
+        }
+      }
+      cur = cur.parentElement;
+    }
+    return best || editor.getBoundingClientRect();
+  };
+
+  const getPerchPoint = (ratio) => {
+    const sz = getSize();
+    const cr = getComposerRect();
+    if (!cr) {
+      return {
+        x: clamp(window.innerWidth - sz - 36, 16, window.innerWidth - sz - 16),
+        y: clamp(window.innerHeight - sz - 24, 48, window.innerHeight - sz - 8),
+      };
+    }
+    const pad = 16;
+    const minX = cr.left + pad;
+    const maxX = Math.max(minX, cr.right - sz - pad);
+    const x = minX + (maxX - minX) * clamp(ratio, 0, 1);
+    const y = Math.max(44, cr.top - sz + Math.round(sz * 0.14));
+    return { x, y };
+  };
+
+  const placeAt = (x, y) => {
+    const sz = getSize();
+    posX = clamp(x, 6, Math.max(6, window.innerWidth - sz - 6));
+    posY = clamp(y, 40, Math.max(40, window.innerHeight - sz - 4));
+    root.style.left = `${Math.round(posX)}px`;
+    root.style.top = `${Math.round(posY)}px`;
+  };
+
+  const snapToPerch = () => {
+    const p = getPerchPoint(perchRatio);
+    targetX = p.x;
+    targetY = p.y;
+    placeAt(p.x, p.y);
+  };
+
+  const isAgentWorking = () => {
+    return Boolean(document.querySelector('[aria-label*="Stop"], button[title*="Stop"], [aria-label*="Cancel generation"]'));
+  };
+
+  // Drag & pet interaction
+  let startMX = 0, startMY = 0, origX = 0, origY = 0;
+  root.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    isDragging = true;
+    dragMoved = false;
+    startMX = e.clientX;
+    startMY = e.clientY;
+    origX = posX;
+    origY = posY;
+    lastActivityTs = Date.now();
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const dx = e.clientX - startMX;
+    const dy = e.clientY - startMY;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) dragMoved = true;
+    if (dragMoved) {
+      mode = 'pinned';
+      isWalking = false;
+      placeAt(origX + dx, origY + dy);
+      targetX = posX;
+      targetY = posY;
+    }
+  });
+  window.addEventListener('mouseup', () => {
+    if (!isDragging) return;
+    isDragging = false;
+    if (dragMoved) {
+      // If dropped close to composer top edge, re-attach to perch
+      const cr = getComposerRect();
+      const sz = getSize();
+      if (cr && posX >= cr.left - 30 && posX <= cr.right + 30 && Math.abs((posY + sz) - cr.top) < 70) {
+        mode = 'perch';
+        const span = Math.max(1, cr.width - sz - 32);
+        perchRatio = clamp((posX - (cr.left + 16)) / span, 0, 1);
+      } else {
+        roamReturnTs = Date.now() + 25000;
+      }
+    }
+  });
+
+  const PET_LINES = ['♥', 'Anty!', 'мур~', '✨', 'готов помочь!', '⚡'];
+  const PURR_LINES = ['мур~ ♥', 'приятно~', 'муррр ♥', 'ещё! ♥', 'хехе ♥'];
+
+  const spawnHeart = (relX) => {
+    const h = document.createElement('span');
+    h.className = 'qusa-anty-heart';
+    h.textContent = Math.random() < 0.75 ? '♥' : '✨';
+    const xPct = clamp(relX, 18, 82);
+    h.style.left = `${xPct}%`;
+    h.style.top = '4px';
+    root.appendChild(h);
+    setTimeout(() => h.remove(), 980);
+  };
+
+  let hoverLeaveTimer = null;
+
+  root.addEventListener('pointerenter', (e) => {
+    if (hoverLeaveTimer) {
+      clearTimeout(hoverLeaveTimer);
+      hoverLeaveTimer = null;
+    }
+    if (!isHovered) {
+      isHovered = true;
+      if (!hoverStartTs) hoverStartTs = Date.now();
+      lastPetX = e.clientX;
+      lastPetDir = 0;
+      petDistance = 0;
+      petReversals = 0;
+    }
+    // Pause walking immediately so Anty stays under your cursor
+    if (isWalking) {
+      targetX = posX;
+      targetY = posY;
+      isWalking = false;
+    }
+  });
+
+  root.addEventListener('pointerleave', () => {
+    isHovered = false;
+    // Grace period so rubbing slightly past Anty's 58px edge doesn't reset the 2s timer
+    if (hoverLeaveTimer) clearTimeout(hoverLeaveTimer);
+    hoverLeaveTimer = setTimeout(() => {
+      hoverLeaveTimer = null;
+      if (!isHovered) {
+        hoverStartTs = 0;
+        petDistance = 0;
+        petReversals = 0;
+      }
+    }, 900);
+  });
+
+  window.addEventListener('pointermove', (e) => {
+    if (isDragging || cfg.antyEnabled === false) return;
+    const r = root.getBoundingClientRect();
+    const pad = 22;
+    const nearAnty = e.clientX >= r.left - pad && e.clientX <= r.right + pad && e.clientY >= r.top - pad && e.clientY <= r.bottom + pad;
+    if (!isHovered && !nearAnty) return;
+
+    const now = Date.now();
+    if (!hoverStartTs) {
+      hoverStartTs = now;
+      lastPetX = e.clientX;
+      return;
+    }
+    if (now - hoverStartTs < 2000) {
+      lastPetX = e.clientX;
+      return;
+    }
+    const dx = e.clientX - lastPetX;
+    if (Math.abs(dx) < 2) return;
+    lastPetX = e.clientX;
+    const dir = dx > 0 ? 1 : -1;
+    if (lastPetDir !== 0 && dir !== lastPetDir) {
+      petReversals++;
+    }
+    lastPetDir = dir;
+    petDistance += Math.abs(dx);
+
+    if (petReversals >= 1 || petDistance >= 10) {
+      const wasPetting = now < pettingUntilTs;
+      pettingUntilTs = now + 950;
+      lastActivityTs = now;
+      setState('petting', 'completed');
+      if (!wasPetting) {
+        setBubble(PURR_LINES[Math.floor(Math.random() * PURR_LINES.length)], 1800);
+      }
+      if (now - lastHeartTs >= 240) {
+        lastHeartTs = now;
+        const relX = r.width > 0 ? ((e.clientX - r.left) / r.width) * 100 : 50;
+        spawnHeart(relX);
+      }
+    }
+  }, true);
+
+  root.addEventListener('click', () => {
+    if (dragMoved) return;
+    lastActivityTs = Date.now();
+    celebrateUntilTs = Date.now() + 2600;
+    setState('completed', 'completed');
+    setBubble(PET_LINES[Math.floor(Math.random() * PET_LINES.length)], 2000);
+  });
+
+  root.addEventListener('dblclick', () => {
+    mode = 'perch';
+    const p = getPerchPoint(0.78);
+    perchRatio = 0.78;
+    targetX = p.x;
+    targetY = p.y;
+    isWalking = true;
+    setBubble('На базу!', 1400);
+  });
+
+  // React to user typing in prompt box
+  document.addEventListener('keydown', (e) => {
+    lastActivityTs = Date.now();
+    const t = e.target;
+    if (t && t.nodeType === 1 && !t.closest('#qusa-theme-modal') && (t.isContentEditable || t.tagName === 'TEXTAREA')) {
+      typingUntilTs = Date.now() + 3500;
+      if (mode !== 'perch') {
+        mode = 'perch';
+        const p = getPerchPoint(perchRatio);
+        targetX = p.x;
+        targetY = p.y;
+      }
+    }
+  }, true);
+
+  document.addEventListener('pointerdown', () => {
+    lastActivityTs = Date.now();
+  }, true);
+
+  // Initial placement
+  snapToPerch();
+  setTimeout(snapToPerch, 700);
+  setTimeout(snapToPerch, 1800);
+
+  window.__qusaUpdateAnty = (newCfg) => {
+    cfg = newCfg;
+    const sz = getSize();
+    root.style.width = `${sz}px`;
+    root.style.height = `${sz}px`;
+    root.style.display = cfg.antyEnabled !== false ? 'block' : 'none';
+    if (!cfg.antyRoam && mode === 'roam') {
+      mode = 'perch';
+    }
+    if (mode === 'perch') snapToPerch();
+  };
+
+  // Smooth animation & behavior loop (~30fps)
+  const SPEED = 2.4;
+  setInterval(() => {
+    if (document.hidden || cfg.antyEnabled === false || isDragging) return;
+    const now = Date.now();
+    const working = isAgentWorking();
+
+    if (wasWorking && !working) {
+      celebrateUntilTs = now + 5500;
+      setBubble('Готово! ♥', 2600);
+    }
+    wasWorking = working;
+
+    // Keep anchored to composer when perched
+    if (mode === 'perch' && !isWalking) {
+      const p = getPerchPoint(perchRatio);
+      if (Math.hypot(p.x - posX, p.y - posY) > 6) {
+        targetX = p.x;
+        targetY = p.y;
+      }
+    }
+
+    // If working or typing, always return to composer
+    if ((working || now < typingUntilTs) && mode !== 'perch') {
+      mode = 'perch';
+      const p = getPerchPoint(perchRatio);
+      targetX = p.x;
+      targetY = p.y;
+    }
+
+    // Return from roam/pin after timer expires
+    if ((mode === 'roam' || mode === 'pinned') && roamReturnTs > 0 && now > roamReturnTs && !working) {
+      mode = 'perch';
+      roamReturnTs = 0;
+      const p = getPerchPoint(perchRatio);
+      targetX = p.x;
+      targetY = p.y;
+    }
+
+    // Decide next stroll when idle (don't walk away while cursor is hovering/petting)
+    if (!isHovered && now > pettingUntilTs && !working && now > typingUntilTs && now > celebrateUntilTs && now > nextActionTs && now - lastActivityTs < 42000) {
+      nextActionTs = now + 11000 + Math.random() * 14000;
+      const sz = getSize();
+      if (mode === 'perch') {
+        const shouldRoam = cfg.antyRoam !== false && Math.random() < 0.28;
+        if (shouldRoam) {
+          mode = 'roam';
+          roamReturnTs = now + 10000 + Math.random() * 7000;
+          const pickEdge = Math.random();
+          if (pickEdge < 0.65) {
+            // Walk along bottom edge of window
+            targetX = 280 + Math.random() * Math.max(80, window.innerWidth - 360 - sz);
+            targetY = window.innerHeight - sz - 8;
+          } else {
+            // Peek near sidebar/top area
+            targetX = 270 + Math.random() * Math.max(80, window.innerWidth - 420 - sz);
+            targetY = 64 + Math.random() * 80;
+          }
+        } else {
+          // Stroll along top edge of prompt box
+          perchRatio = 0.08 + Math.random() * 0.84;
+          const p = getPerchPoint(perchRatio);
+          targetX = p.x;
+          targetY = p.y;
+        }
+      }
+    }
+
+    // Move smoothly toward target
+    const dx = targetX - posX;
+    const dy = targetY - posY;
+    const dist = Math.hypot(dx, dy);
+
+    if (dist > 3) {
+      isWalking = true;
+      const step = Math.min(dist, SPEED * (dist > 140 ? 1.8 : 1.0));
+      placeAt(posX + (dx / dist) * step, posY + (dy / dist) * step);
+      if (Math.abs(dx) > 1.5) {
+        root.setAttribute('data-dir', dx < 0 ? 'left' : 'right');
+      }
+      setState('walking', 'walking');
+      return;
+    }
+
+    isWalking = false;
+
+    // Choose stationary state
+    if (now < pettingUntilTs) {
+      setState('petting', 'completed');
+    } else if (working) {
+      setState('working', 'working');
+    } else if (now < celebrateUntilTs) {
+      setState('completed', 'completed');
+    } else if (now < typingUntilTs) {
+      setState('asking', 'asking');
+    } else if (now - lastActivityTs >= 45000) {
+      setState('sleeping', 'sleeping');
+    } else {
+      setState('idle', 'idle');
+    }
+  }, 33);
+}
+
 function initQusaCustomUI() {
   const boot = async () => {
     if (!document.head || !document.body) return;
@@ -1597,6 +2232,7 @@ function initQusaCustomUI() {
     injectStyles(cfg);
     updateWallpaperLayer(cfg);
     createStyleUI(cfg);
+    initAntyMascot(cfg);
     if (window.__qusaSyncWpStatus) window.__qusaSyncWpStatus();
     applySurfaceColors(cfg);
     applyTextTransforms(document.body, cfg);

@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Antigravity mascot - asking a question" shape-rendering="crispEdges">
+<title>Antigravity mascot - asking a question</title>
+
+<defs>
+  <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#b66cff"/>
+    <stop offset="1" stop-color="#55d9ff"/>
+  </linearGradient>
+  <linearGradient id="earGlow" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#a86bff"/>
+    <stop offset="1" stop-color="#78cfff"/>
+  </linearGradient>
+</defs>
+
+
+<!-- ears/head -->
+<path d="M65 102V64h20V47h24v17h39V47h24v17h18v38h13v40h-16v15H68v-15H52v-40z" fill="#242131" stroke="#090812" stroke-width="7"/>
+<path d="M77 91V68h13V56h12v35zM157 91V56h12v12h13v23z" fill="url(#earGlow)"/>
+<!-- curious eyes -->
+<rect x="91" y="111" width="10" height="19" fill="#b98aff"/>
+<rect x="151" y="111" width="10" height="19" fill="#8bdcff"/>
+<path d="M118 139h19v8h-19z" fill="#090812"/>
+<!-- hoodie/body -->
+<path d="M78 158h100v18h18v48h-20v12H81v-12H61v-48h17z" fill="#242131" stroke="#090812" stroke-width="7"/>
+<path d="M112 180h32v11h-10v14h-12v-14h-10z" fill="url(#accent)"/>
+<!-- paws raised -->
+<path d="M61 176h19v15h10v18H70v-9H57v-16h4zM176 176h19v8h5v16h-13v9h-20v-18h9z" fill="#242131" stroke="#090812" stroke-width="6"/>
+<!-- question bubble -->
+<path d="M186 23h48v39h-15v14h-15V62h-18z" fill="#171522" stroke="#090812" stroke-width="6"/>
+<path d="M201 36h18v8h-8v7h-10v-8h8v-2h-8zM205 54h10v7h-10z" fill="url(#accent)"/>
+
+</svg>

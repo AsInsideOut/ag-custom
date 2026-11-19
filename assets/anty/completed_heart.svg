@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Antigravity mascot - task completed with heart" shape-rendering="crispEdges">
+<title>Antigravity mascot - task completed with heart</title>
+
+<defs>
+  <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#b66cff"/>
+    <stop offset="1" stop-color="#55d9ff"/>
+  </linearGradient>
+  <linearGradient id="earGlow" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#a86bff"/>
+    <stop offset="1" stop-color="#78cfff"/>
+  </linearGradient>
+</defs>
+
+
+<!-- heart -->
+<path d="M190 47h12V35h18v12h12v18h-12v12h-18V65h-12z" fill="#ff75bd" stroke="#090812" stroke-width="5"/>
+<path d="M201 48h8v-6h7v8h8v8h-8v8h-7v-8h-8z" fill="#ffc0e1"/>
+<!-- tail curled -->
+<path d="M165 178h20v-10h18v10h12v19h-12v18h-18v10h-20v-10h-10v-19h10z" fill="#242131" stroke="#090812" stroke-width="6"/>
+<path d="M184 181h15v13h-9v14h-14v-12h8z" fill="url(#accent)"/>
+<!-- seated body -->
+<path d="M79 157h99v18h18v44h-20v14H84v-12H63v-46h16z" fill="#242131" stroke="#090812" stroke-width="7"/>
+<!-- head -->
+<path d="M65 95V58h20V42h24v16h39V42h24v16h18v37h13v40h-16v16H68v-16H52V95z" fill="#242131" stroke="#090812" stroke-width="7"/>
+<path d="M77 84V62h13V50h12v34zM157 84V50h12v12h13v22z" fill="url(#earGlow)"/>
+<!-- happy closed eyes -->
+<path d="M91 111h10v7h10v8H99v-7h-8zM145 126h-10v-8h10v-7h10v8h-10z" fill="#b98aff"/>
+<!-- paws together -->
+<path d="M91 174h28v16h-10v12H91zM137 174h28v28h-18v-12h-10z" fill="#171522" stroke="#090812" stroke-width="5"/>
+
+</svg>
