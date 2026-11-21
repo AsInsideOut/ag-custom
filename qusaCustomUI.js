@@ -133,6 +133,37 @@ const RU_DICT = {
   'Accept': 'Принять',
   'Apply': 'Применить',
   'Reset': 'Сбросить',
+  'Archive': 'Архивировать',
+  'Split': 'Разделить',
+  'Split Right': 'Разделить вправо',
+  'Split Down': 'Разделить вниз',
+  'Replace with New': 'Заменить новым',
+  'Conversation Name': 'Название чата',
+  'Conversation ID': 'ID чата',
+  'Project Name': 'Название проекта',
+  'Search or enter a URL': 'Поиск или введите URL',
+  'Review': 'Обзор изменений',
+  'Open File': 'Открыть файл',
+  'Background Tasks': 'Фоновые задачи',
+  'See all': 'Показать все',
+  'See less': 'Свернуть',
+  'Local Permissions': 'Локальные разрешения',
+  'Request Review': 'Запрашивать подтверждение',
+  'Every command requires approval.': 'Каждая команда требует подтверждения.',
+  'Default': 'По умолчанию',
+  'Ask before sensitive operations.': 'Спрашивать перед важными операциями.',
+  'Auto': 'Авто',
+  'Automatically decide if commands run.': 'Автоматически решать, запускать ли команды.',
+  'Run all commands without restrictions.': 'Запускать все команды без ограничений.',
+  'Add Context': 'Добавить контекст',
+  'Folder': 'Папка',
+  'Mentions': 'Упоминания',
+  'Actions': 'Действия',
+  'Log in': 'Войти',
+  'Main Agent': 'Главный агент',
+  'Open in Antigravity IDE': 'Открыть в Antigravity IDE',
+  'now': 'сейчас',
+  'just now': 'только что',
 };
 
 const STORAGE_KEY = 'qusa_custom_ui_v2';
@@ -150,6 +181,7 @@ const DEFAULT_CONFIG = {
   wallpaperBlur: 0,
   panelAlpha: 0.68,
   ruEnabled: false,
+  translateThoughts: false,
   customAccountName: '',
   modelRenames: {},
   fabHidden: false,
@@ -1100,7 +1132,133 @@ function applySurfaceColors(cfg) {
 
 const origTextMap = new WeakMap();
 const lastAppliedMap = new WeakMap();
+const thoughtTransCache = new Map();
+const pendingThoughtNodes = new Map(); // trimmed -> Set<Text>
+let thoughtFlushTimer = null;
 let detectedAccountName = '';
+
+const THOUGHT_STEP_RE = /^(?:Worked for|Thought for|Thinking|Working|Ran|Running|Edited|Editing|Edit|Created|Creating|Create|Read|Reading|Viewed|Viewing|View|Deleted|Deleting|Delete|Removed|Removing|Remove|Updated|Updating|Update|Checked|Checking|Check|Searched|Searching|Search|Listed|Listing|List|Found|Finding|Find|Analyzed|Analyzing|Analyze|Inspected|Inspecting|Inspect|Built|Building|Build|Validated|Validating|Validate|Verified|Verifying|Verify|Fixed|Fixing|Fix|Added|Adding|Add|Installed|Installing|Install|Fetched|Fetching|Fetch|Downloaded|Downloading|Download|Uploaded|Uploading|Upload|Patched|Patching|Patch|Repacked|Repacking|Repack|Committed|Commit|Pushed|Pushing|Push|Published|Publishing|Publish|Tested|Testing|Test|Parsed|Parsing|Parse|Extracted|Extracting|Extract|Copied|Copying|Copy|Moved|Moving|Move|Renamed|Renaming|Rename|Wrote|Writing|Write|Saved|Saving|Save|Loaded|Loading|Load|Opened|Opening|Open|Started|Starting|Start|Stopped|Stopping|Stop|Restarted|Restarting|Restart|Called|Calling|Call|Queried|Querying|Query|Looked up|Looking up|Diagnosed|Diagnosing|Diagnose|Rebuilt|Rebuilding|Rebuild|Init|Initialize)\b/i;
+
+const SINGLE_STEP_WORDS = {
+  Ran: 'Выполнено',
+  Running: 'Выполняется',
+  Edited: 'Изменён',
+  Editing: 'Изменение',
+  Created: 'Создан',
+  Creating: 'Создание',
+  Read: 'Прочитан',
+  Reading: 'Чтение',
+  Viewed: 'Просмотрен',
+  Viewing: 'Просмотр',
+  Deleted: 'Удалён',
+  Removed: 'Удалён',
+  Updated: 'Обновлён',
+  Saved: 'Сохранён',
+  Searched: 'Поиск',
+  Searching: 'Поиск...',
+  Thinking: 'Думаю',
+  Working: 'Работаю',
+};
+
+const MODEL_IGNORE_RE = /^(?:Gemini|Claude|GPT-OSS|Orchestrator|Main Agent|Remote Control|Open IDE|Local Checkout)\b/i;
+
+function translateThoughtFastLocal(trimmed) {
+  if (SINGLE_STEP_WORDS[trimmed]) return SINGLE_STEP_WORDS[trimmed];
+  let m = trimmed.match(/^Worked for\s+(.+)$/i);
+  if (m) {
+    const dur = m[1].replace(/(\d+)\s*h\b/gi, '$1ч').replace(/(\d+)\s*m\b/gi, '$1м').replace(/(\d+)\s*s\b/gi, '$1с');
+    return `Работал ${dur}`;
+  }
+  m = trimmed.match(/^Thought for\s+(.+)$/i);
+  if (m) {
+    const dur = m[1].replace(/(\d+)\s*h\b/gi, '$1ч').replace(/(\d+)\s*m\b/gi, '$1м').replace(/(\d+)\s*s\b/gi, '$1с');
+    return `Думал ${dur}`;
+  }
+  // Exact single-filename actions like "Edited qusaCustomUI.js", "Read README.md", "Created patch_asar.py"
+  m = trimmed.match(/^(Edited|Created|Read|Viewed|Deleted|Removed|Updated|Saved|Opened)\s+([^\s]+\.[A-Za-z0-9]{1,8}(?:\s*.*)?)$/);
+  if (m && !/[A-Za-z]{3,}\s+[A-Za-z]{3,}/.test(m[2])) {
+    return `${SINGLE_STEP_WORDS[m[1]] || m[1]} ${m[2]}`;
+  }
+  return null;
+}
+
+function isThoughtHeaderNode(trimmed, parentEl) {
+  if (!trimmed || trimmed.length < 3 || trimmed.length > 260) return false;
+  if (trimmed.includes('\n')) return false;
+  if (!/[A-Za-z]{3,}/.test(trimmed)) return false;
+  if (MODEL_IGNORE_RE.test(trimmed)) return false;
+  if (RU_DICT[trimmed]) return false;
+  if (!parentEl) return false;
+  // Never translate sidebar chat titles, topbar, composer, tooltips, modals, or code/terminal outputs
+  if (parentEl.closest('[data-qusa-role="sidebar"], [data-qusa-sidebar-root="1"], [data-qusa-role="header"], [data-qusa-composer="1"], form, pre, code, .prose, [role="menu"], [role="listbox"], [role="dialog"], [role="tooltip"]')) {
+    return false;
+  }
+  // Never translate buttons inside the bottom composer area
+  const pr = parentEl.getBoundingClientRect();
+  if (pr.bottom > window.innerHeight - 150 && parentEl.closest('button')) return false;
+  if (THOUGHT_STEP_RE.test(trimmed) || /\bfinished$/i.test(trimmed)) return true;
+  // Also allow collapsible thought summary buttons inside the chat stream
+  const btn = parentEl.closest('button, summary');
+  if (btn && btn.getBoundingClientRect().left > 220 && btn.getBoundingClientRect().top > 60) {
+    if (trimmed.length >= 12 && /\s/.test(trimmed)) return true;
+  }
+  return false;
+}
+
+function queueThoughtTranslation(node, trimmed, cfg) {
+  const hasBatch = window.qusaPersist && typeof window.qusaPersist.translateBatch === 'function';
+  const hasSingle = window.qusaPersist && typeof window.qusaPersist.translateText === 'function';
+  if (!hasBatch && !hasSingle) return;
+  if (!pendingThoughtNodes.has(trimmed)) {
+    pendingThoughtNodes.set(trimmed, new Set());
+  }
+  pendingThoughtNodes.get(trimmed).add(node);
+  if (thoughtFlushTimer) return;
+
+  thoughtFlushTimer = setTimeout(async () => {
+    thoughtFlushTimer = null;
+    const batch = Array.from(pendingThoughtNodes.entries());
+    pendingThoughtNodes.clear();
+    if (!cfg.translateThoughts || batch.length === 0) return;
+
+    const keys = batch.map(([k]) => k).filter((k) => !thoughtTransCache.has(k));
+    if (keys.length > 0) {
+      try {
+        if (hasBatch) {
+          const map = await window.qusaPersist.translateBatch(keys);
+          if (map && typeof map === 'object') {
+            for (const [k, v] of Object.entries(map)) {
+              if (v && v !== k) thoughtTransCache.set(k, v);
+            }
+          }
+        } else {
+          for (const k of keys) {
+            const v = await window.qusaPersist.translateText(k);
+            if (v && v !== k) thoughtTransCache.set(k, v);
+          }
+        }
+      } catch {}
+    }
+
+    if (!cfg.translateThoughts) return;
+    for (const [srcText, nodes] of batch) {
+      let translated = thoughtTransCache.get(srcText);
+      if (!translated || translated === srcText) continue;
+      if (/^Ran\s+/i.test(translated)) {
+        translated = translated.replace(/^Ran\s+/i, 'Выполнено: ');
+      }
+      for (const n of nodes) {
+        if (!n.isConnected) continue;
+        const base = origTextMap.has(n) ? origTextMap.get(n) : (n.nodeValue || '');
+        if (base.trim() !== srcText) continue;
+        const next = base.replace(srcText, translated);
+        if (!origTextMap.has(n)) origTextMap.set(n, base);
+        lastAppliedMap.set(n, next);
+        if (n.nodeValue !== next) n.nodeValue = next;
+      }
+    }
+  }, 650);
+}
 
 const GREETING_PATTERNS = [
   // "Hey <name>, what are we building?" / "Hi <name>, ..."
@@ -1162,8 +1320,16 @@ function applyModelRenamesToString(raw, pairs) {
 function translateTextValue(raw) {
   if (!raw) return raw;
   const trimmed = raw.trim();
-  if (!trimmed || /^[a-z0-9-]+$/.test(trimmed)) return raw;
+  if (!trimmed) return raw;
   if (RU_DICT[trimmed]) return raw.replace(trimmed, RU_DICT[trimmed]);
+  // Compact sidebar relative timestamps: "2m", "3h", "1d", "2mo"
+  const shortTime = trimmed.match(/^(\d+)\s*(mo|m|h|d)$/i);
+  if (shortTime) {
+    const u = shortTime[2].toLowerCase();
+    const uMap = { m: 'м.', h: 'ч.', d: 'д.', mo: 'мес.' };
+    return raw.replace(trimmed, `${shortTime[1]}${uMap[u]}`);
+  }
+  if (/^[a-z0-9-]+$/.test(trimmed)) return raw;
   const agoMatch = trimmed.match(/^(\d+)([mhd])\s+ago$/);
   if (agoMatch) {
     const unitMap = { m: 'м назад', h: 'ч назад', d: 'д назад' };
@@ -1200,7 +1366,22 @@ function processSingleTextNode(node, cfg, pairs) {
   if (pairs.length > 0) {
     result = applyModelRenamesToString(result, pairs);
   }
-  if (cfg.ruEnabled) {
+  let handledThought = false;
+  if (cfg.translateThoughts) {
+    const trimmed = base.trim();
+    if (isThoughtHeaderNode(trimmed, parent)) {
+      handledThought = true;
+      const fast = translateThoughtFastLocal(trimmed);
+      if (fast) {
+        result = base.replace(trimmed, fast);
+      } else if (thoughtTransCache.has(trimmed)) {
+        result = base.replace(trimmed, thoughtTransCache.get(trimmed));
+      } else {
+        queueThoughtTranslation(node, trimmed, cfg);
+      }
+    }
+  }
+  if (cfg.ruEnabled && !handledThought) {
     result = translateTextValue(result);
   }
 
@@ -1404,6 +1585,11 @@ function createStyleUI(cfg) {
         </div>
 
         <div class="qusa-row">
+          <span>Перевод мыслей и шагов (Google Translate)</span>
+          <input type="checkbox" id="qusa-thoughts-ru-toggle" />
+        </div>
+
+        <div class="qusa-row">
           <span>Скрыть кнопку «Стиль»</span>
           <input type="checkbox" id="qusa-fab-hidden-toggle" />
         </div>
@@ -1508,6 +1694,7 @@ function createStyleUI(cfg) {
     const wpBlurRange = document.getElementById('qusa-wp-blur-range');
     const wpBlurVal = document.getElementById('qusa-wp-blur-val');
     const ruToggle = document.getElementById('qusa-ru-toggle');
+    const thoughtsRuToggle = document.getElementById('qusa-thoughts-ru-toggle');
     const fabHiddenToggle = document.getElementById('qusa-fab-hidden-toggle');
     const hotkeyBtn = document.getElementById('qusa-hotkey-btn');
     const hotkeyResetBtn = document.getElementById('qusa-hotkey-reset-btn');
@@ -1634,6 +1821,7 @@ function createStyleUI(cfg) {
       wpBlurRange.value = String(cfg.wallpaperBlur || 0);
       wpBlurVal.textContent = `${cfg.wallpaperBlur || 0}px`;
       ruToggle.checked = Boolean(cfg.ruEnabled);
+      thoughtsRuToggle.checked = Boolean(cfg.translateThoughts);
       fabHiddenToggle.checked = Boolean(cfg.fabHidden);
       hotkeyBtn.textContent = formatHotkey(cfg.fabHotkey || 'Alt+KeyS');
       accountNameInput.value = cfg.customAccountName || '';
@@ -1774,6 +1962,12 @@ function createStyleUI(cfg) {
 
     ruToggle.addEventListener('change', () => {
       cfg.ruEnabled = ruToggle.checked;
+      saveConfig(cfg, true);
+      applyTextTransforms(document.body, cfg);
+    });
+
+    thoughtsRuToggle.addEventListener('change', () => {
+      cfg.translateThoughts = thoughtsRuToggle.checked;
       saveConfig(cfg, true);
       applyTextTransforms(document.body, cfg);
     });
@@ -2478,7 +2672,16 @@ function initWeatherEffect(cfg) {
 
   const scanColliders = () => {
     const out = [];
-    // 1. Prompt composer box
+    // 1. Open popup menus / dropdowns (e.g. Model Picker, Permissions, Context menu)
+    const popups = document.querySelectorAll('[role="menu"], [role="listbox"], [role="dialog"]');
+    for (const pop of popups) {
+      if (pop.closest('#qusa-theme-modal')) continue;
+      const pr = pop.getBoundingClientRect();
+      if (pr.width >= 120 && pr.height >= 60 && pr.width < width * 0.9 && pr.height < height * 0.9) {
+        out.push({ left: pr.left, right: pr.right, top: pr.top, bottom: pr.bottom });
+      }
+    }
+    // 2. Prompt composer box
     const editors = document.querySelectorAll('[contenteditable="true"], textarea');
     for (const ed of editors) {
       if (ed.closest('#qusa-theme-modal')) continue;
@@ -2486,6 +2689,7 @@ function initWeatherEffect(cfg) {
       if (er.width < 150 || er.height < 16) continue;
       let cur = ed;
       let best = null;
+      let bestEl = null;
       for (let i = 0; i < 8 && cur && cur !== document.body; i++) {
         const r = cur.getBoundingClientRect();
         if (r.width >= 260 && r.width <= width * 0.92 && r.height >= 44 && r.height <= 340) {
@@ -2493,14 +2697,18 @@ function initWeatherEffect(cfg) {
           const br = parseFloat(cs.borderRadius) || 0;
           if (cur.tagName === 'FORM' || br >= 10 || (cs.borderTopWidth && parseFloat(cs.borderTopWidth) >= 1)) {
             best = r;
+            bestEl = cur;
           }
         }
         cur = cur.parentElement;
       }
-      if (best) out.push({ left: best.left, right: best.right, top: best.top, bottom: best.bottom });
+      if (best) {
+        if (bestEl) bestEl.setAttribute('data-qusa-composer', '1');
+        out.push({ left: best.left, right: best.right, top: best.top, bottom: best.bottom });
+      }
       break;
     }
-    // 2. Sidebar panel
+    // 3. Sidebar panel
     const sb = document.querySelector('[data-qusa-sidebar-root="1"]') || document.querySelector('[data-qusa-role="sidebar"]');
     if (sb) {
       const sr = sb.getBoundingClientRect();
@@ -2954,7 +3162,7 @@ function initQusaCustomUI() {
       }
       const pairs = getActiveModelPairs(cfg);
       const hasAcc = Boolean((cfg.customAccountName || '').trim());
-      if (!cfg.ruEnabled && pairs.length === 0 && !hasAcc) return;
+      if (!cfg.ruEnabled && !cfg.translateThoughts && pairs.length === 0 && !hasAcc) return;
 
       for (const m of mutations) {
         if (m.type === 'characterData') {

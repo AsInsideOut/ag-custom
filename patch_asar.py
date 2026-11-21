@@ -16,6 +16,8 @@ electron_1.contextBridge.exposeInMainWorld('qusaPersist', {
     loadWallpaper: () => electron_1.ipcRenderer.invoke('qusa:load-wallpaper'),
     saveWallpaper: (payload) => electron_1.ipcRenderer.invoke('qusa:save-wallpaper', payload),
     clearWallpaper: () => electron_1.ipcRenderer.invoke('qusa:clear-wallpaper'),
+    translateText: (text) => electron_1.ipcRenderer.invoke('qusa:translate', text),
+    translateBatch: (texts) => electron_1.ipcRenderer.invoke('qusa:translate-batch', texts),
 });
 """
 
@@ -74,6 +76,116 @@ UTILS_HOOK = """    if (!global.__qusaIpcRegistered) {
                     if (qFs.existsSync(qWpMeta)) qFs.unlinkSync(qWpMeta);
                     return true;
                 } catch (e) { console.error('[Qusa] clear-wallpaper error:', e); return false; }
+            });
+            const qTransFile = qPath.join(qDir, 'custom-ui-trans-cache.json');
+            const qTransCache = new Map();
+            try {
+                if (qFs.existsSync(qTransFile)) {
+                    const saved = JSON.parse(qFs.readFileSync(qTransFile, 'utf8'));
+                    if (saved && typeof saved === 'object') {
+                        for (const [k, v] of Object.entries(saved)) qTransCache.set(k, v);
+                    }
+                }
+            } catch {}
+            const saveTransCache = () => {
+                try {
+                    ensureDir();
+                    const obj = {};
+                    let count = 0;
+                    for (const [k, v] of qTransCache.entries()) {
+                        obj[k] = v;
+                        if (++count >= 1200) break;
+                    }
+                    qFs.writeFileSync(qTransFile, JSON.stringify(obj), 'utf8');
+                } catch {}
+            };
+            const qHttps = require('https');
+            const httpGetJson = (url) => new Promise((resolve) => {
+                const req = qHttps.get(url, { timeout: 6000, headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
+                    let body = '';
+                    res.on('data', (chunk) => { body += chunk; });
+                    res.on('end', () => {
+                        if (res.statusCode !== 200) return resolve(null);
+                        try { resolve(JSON.parse(body)); } catch { resolve(null); }
+                    });
+                });
+                req.on('error', () => resolve(null));
+                req.on('timeout', () => { req.destroy(); resolve(null); });
+            });
+            let googleBlockedUntil = 0;
+            const translateGoogleBatch = async (items) => {
+                if (Date.now() < googleBlockedUntil) return null;
+                const joined = items.join('\\n');
+                const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=ru&dt=t&q=' + encodeURIComponent(joined);
+                const data = await httpGetJson(url);
+                if (!data || !Array.isArray(data[0])) {
+                    googleBlockedUntil = Date.now() + 180000;
+                    return null;
+                }
+                const full = data[0].map((part) => (Array.isArray(part) ? part[0] : '')).join('');
+                const lines = full.split('\\n');
+                if (lines.length === items.length) return lines;
+                return null;
+            };
+            const translateMyMemoryOne = async (text) => {
+                const url = 'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text) + '&langpair=en|ru';
+                const data = await httpGetJson(url);
+                const out = data && data.responseData && data.responseData.translatedText;
+                if (typeof out === 'string' && out.trim() && !/MYMEMORY WARNING/i.test(out)) {
+                    return out.trim();
+                }
+                return null;
+            };
+            const runBatchTranslate = async (texts) => {
+                const result = {};
+                const todo = [];
+                for (const raw of (Array.isArray(texts) ? texts : [])) {
+                    const clean = String(raw || '').trim();
+                    if (!clean || clean.length > 400) continue;
+                    if (qTransCache.has(clean)) {
+                        result[clean] = qTransCache.get(clean);
+                    } else if (!todo.includes(clean)) {
+                        todo.push(clean);
+                    }
+                }
+                let changed = false;
+                for (let idx = 0; idx < todo.length; idx += 12) {
+                    const slice = todo.slice(idx, idx + 12);
+                    const gRes = await translateGoogleBatch(slice);
+                    if (gRes) {
+                        for (let j = 0; j < slice.length; j++) {
+                            const t = (gRes[j] || '').trim();
+                            if (t && t !== slice[j]) {
+                                qTransCache.set(slice[j], t);
+                                result[slice[j]] = t;
+                                changed = true;
+                            }
+                        }
+                    } else {
+                        for (const item of slice) {
+                            const mRes = await translateMyMemoryOne(item);
+                            if (mRes && mRes !== item) {
+                                qTransCache.set(item, mRes);
+                                result[item] = mRes;
+                                changed = true;
+                            }
+                            await new Promise((r) => setTimeout(r, 180));
+                        }
+                    }
+                }
+                if (changed) saveTransCache();
+                return result;
+            };
+            qIpc.handle('qusa:translate-batch', async (_ev, texts) => {
+                try { return await runBatchTranslate(texts); } catch { return {}; }
+            });
+            qIpc.handle('qusa:translate', async (_ev, text) => {
+                try {
+                    const clean = String(text || '').trim();
+                    if (!clean) return clean;
+                    const map = await runBatchTranslate([clean]);
+                    return map[clean] || clean;
+                } catch { return text; }
             });
         } catch (err) {
             console.error('[Qusa] Failed to register IPC:', err);
