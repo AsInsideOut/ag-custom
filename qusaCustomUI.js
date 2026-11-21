@@ -163,7 +163,12 @@ const RU_DICT = {
   'Main Agent': 'Главный агент',
   'Open in Antigravity IDE': 'Открыть в Antigravity IDE',
   'now': 'сейчас',
+  'Now': 'Сейчас',
   'just now': 'только что',
+  'Just now': 'Только что',
+  'Just Now': 'Только что',
+  '<1m': '<1м.',
+  '< 1m': '<1м.',
 };
 
 const STORAGE_KEY = 'qusa_custom_ui_v2';
@@ -174,6 +179,7 @@ const DEFAULT_CONFIG = {
   separateSidebar: false,
   sidebarColor: '#181818',
   detachedSidebar: true,
+  glassStyle: 'frosted',
   panelContrast: 1.0,
   wallpaperUrl: '',
   wallpaperLocalName: '',
@@ -194,6 +200,7 @@ const DEFAULT_CONFIG = {
   weatherEffect: 'none',
   weatherIntensity: 1.0,
   weatherSpeed: 1.0,
+  spotifyIsland: true,
 };
 
 let activeLocalBlobUrl = '';
@@ -417,6 +424,25 @@ function updateWallpaperLayer(cfg) {
   }
 }
 
+function ensureLiquidGlassFilter() {
+  if (document.getElementById('qusa-liquid-svg')) return;
+  const wrap = document.createElement('div');
+  wrap.id = 'qusa-liquid-svg';
+  wrap.style.cssText = 'position:fixed;width:0;height:0;overflow:hidden;pointer-events:none;';
+  wrap.innerHTML = `
+    <svg width="0" height="0" aria-hidden="true">
+      <defs>
+        <filter id="qusa-liquid-glass" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">
+          <feTurbulence type="fractalNoise" baseFrequency="0.008 0.012" numOctaves="2" seed="7" result="noise" />
+          <feGaussianBlur in="noise" stdDeviation="4" result="smoothNoise" />
+          <feDisplacementMap in="SourceGraphic" in2="smoothNoise" scale="16" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+      </defs>
+    </svg>
+  `;
+  document.body.appendChild(wrap);
+}
+
 function injectStyles(cfg) {
   let styleEl = document.getElementById('qusa-custom-styles');
   if (!styleEl) {
@@ -427,11 +453,32 @@ function injectStyles(cfg) {
 
   const baseRgb = hexToRgb(cfg.baseColor) || [18, 18, 18];
   const wpActive = hasActiveWallpaper(cfg);
+  const isLiquid = cfg.glassStyle === 'liquid';
   const isCustomColor = Boolean(cfg.colorEnabled && cfg.baseColor.toLowerCase() !== '#121212');
   const modalBg = shiftRgb(baseRgb, 10);
   const btnBg = shiftRgb(baseRgb, 16);
   const wpBlur = Number(cfg.wallpaperBlur || 0);
   const wpDim = Number(cfg.wallpaperDim ?? 0.42);
+  const glassFilter = isLiquid
+    ? 'url(#qusa-liquid-glass) blur(14px) saturate(175%) brightness(1.03)'
+    : 'blur(20px) saturate(155%)';
+  const sidebarGlassFilter = isLiquid
+    ? 'url(#qusa-liquid-glass) blur(18px) saturate(125%) brightness(0.92)'
+    : 'blur(20px) saturate(155%)';
+  const glassBorder = isLiquid ? 'rgba(255, 255, 255, 0.26)' : 'rgba(255, 255, 255, 0.14)';
+  const sidebarGlassBorder = isLiquid ? 'rgba(255, 255, 255, 0.18)' : 'rgba(255, 255, 255, 0.14)';
+  const glassShadow = isLiquid
+    ? '0 14px 36px rgba(0, 0, 0, 0.40), inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.48), inset 1px 0 1px 0 rgba(255, 255, 255, 0.22), inset 0 -1px 2px 0 rgba(0, 0, 0, 0.28)'
+    : '0 10px 30px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.08)';
+  const sidebarGlassShadow = isLiquid
+    ? '0 12px 32px rgba(0, 0, 0, 0.38), inset 0 1px 1px 0 rgba(255, 255, 255, 0.22), inset 1px 0 1px 0 rgba(255, 255, 255, 0.10), inset 0 -1px 2px 0 rgba(0, 0, 0, 0.24)'
+    : '0 10px 30px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.08)';
+  const liquidSheen = isLiquid
+    ? 'background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.02) 45%, rgba(255, 255, 255, 0.08) 100%) !important;'
+    : '';
+  const sidebarLiquidSheen = isLiquid
+    ? 'background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 45%, rgba(255, 255, 255, 0.03) 100%) !important;'
+    : '';
 
   styleEl.textContent = `
     ${wpActive ? `
@@ -452,18 +499,44 @@ function injectStyles(cfg) {
       box-shadow: none !important;
     }
     ${cfg.detachedSidebar !== false ? `
+    ${wpActive ? `
+    [data-qusa-role="header"] {
+      background-color: transparent !important;
+      border-bottom: none !important;
+    }
+    ` : `
     [data-qusa-role="header"] {
       border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
     }
+    `}
     [data-qusa-sidebar-root="1"] {
       margin: 2px 4px 8px 8px !important;
       height: calc(100% - 10px) !important;
       box-sizing: border-box !important;
-      border-radius: 12px !important;
-      border: 1px solid rgba(255, 255, 255, 0.10) !important;
+      border-radius: ${isLiquid ? '16px' : '12px'} !important;
+      border: 1px solid ${sidebarGlassBorder} !important;
+      backdrop-filter: ${sidebarGlassFilter} !important;
+      -webkit-backdrop-filter: ${sidebarGlassFilter} !important;
+      box-shadow: ${sidebarGlassShadow} !important;
+      ${sidebarLiquidSheen}
       overflow: hidden !important;
     }
     ` : ''}
+    [role="menu"], [role="listbox"], [role="dialog"] {
+      backdrop-filter: ${glassFilter} !important;
+      -webkit-backdrop-filter: ${glassFilter} !important;
+      border-color: ${glassBorder} !important;
+      box-shadow: ${glassShadow} !important;
+      ${isLiquid ? 'border-radius: 16px !important;' : ''}
+      ${liquidSheen}
+    }
+    [data-qusa-composer="1"] {
+      backdrop-filter: ${glassFilter} !important;
+      -webkit-backdrop-filter: ${glassFilter} !important;
+      border-color: ${glassBorder} !important;
+      box-shadow: ${glassShadow} !important;
+      ${liquidSheen}
+    }
     #qusa-bg-layer {
       position: fixed;
       inset: 0;
@@ -505,47 +578,82 @@ function injectStyles(cfg) {
       box-shadow: none !important;
     }
     ${cfg.detachedSidebar !== false ? `
+    ${wpActive ? `
+    [data-qusa-role="header"] {
+      background-color: transparent !important;
+      border-bottom: none !important;
+    }
+    ` : `
     [data-qusa-role="header"] {
       border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
     }
+    `}
     [data-qusa-sidebar-root="1"] {
       margin: 2px 4px 8px 8px !important;
       height: calc(100% - 10px) !important;
       box-sizing: border-box !important;
-      border-radius: 12px !important;
-      border: 1px solid rgba(255, 255, 255, 0.10) !important;
+      border-radius: ${isLiquid ? '16px' : '12px'} !important;
+      border: 1px solid ${sidebarGlassBorder} !important;
+      backdrop-filter: ${sidebarGlassFilter} !important;
+      -webkit-backdrop-filter: ${sidebarGlassFilter} !important;
+      box-shadow: ${sidebarGlassShadow} !important;
+      ${sidebarLiquidSheen}
       overflow: hidden !important;
     }
     ` : ''}
+    [role="menu"], [role="listbox"], [role="dialog"] {
+      backdrop-filter: ${glassFilter} !important;
+      -webkit-backdrop-filter: ${glassFilter} !important;
+      border-color: ${glassBorder} !important;
+      box-shadow: ${glassShadow} !important;
+      ${isLiquid ? 'border-radius: 16px !important;' : ''}
+      ${liquidSheen}
+    }
+    [data-qusa-composer="1"] {
+      backdrop-filter: ${glassFilter} !important;
+      -webkit-backdrop-filter: ${glassFilter} !important;
+      border-color: ${glassBorder} !important;
+      box-shadow: ${glassShadow} !important;
+      ${liquidSheen}
+    }
     ` : '')}
 
-    /* Compact Native-Style Draggable Button */
+    /* Compact Style Button (docked next to Settings in sidebar, fallback bottom-left) */
     #qusa-style-fab {
-      position: fixed;
-      right: 215px;
-      top: 42px;
-      z-index: 99998;
-      display: ${cfg.fabHidden ? 'none' : 'flex'};
+      display: ${cfg.fabHidden ? 'none' : 'inline-flex'};
       align-items: center;
       gap: 6px;
-      padding: 5px 11px;
-      border-radius: 8px;
-      background: rgb(${btnBg[0]}, ${btnBg[1]}, ${btnBg[2]});
+      padding: 4px 10px;
+      border-radius: ${isLiquid ? '999px' : '8px'};
+      background: rgba(${btnBg[0]}, ${btnBg[1]}, ${btnBg[2]}, ${isLiquid ? '0.32' : '0.54'});
+      backdrop-filter: ${glassFilter};
+      -webkit-backdrop-filter: ${glassFilter};
       color: #e2e8f0;
-      border: 1px solid rgba(255, 255, 255, 0.12);
+      border: 1px solid ${glassBorder};
       font-family: system-ui, -apple-system, sans-serif;
       font-size: 12px;
       font-weight: 500;
-      cursor: grab;
+      cursor: pointer;
       user-select: none;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
-      transition: border-color 0.15s ease, background-color 0.15s ease;
+      flex-shrink: 0;
+      box-shadow: ${isLiquid ? '0 4px 14px rgba(0,0,0,0.32), inset 0 1px 1px rgba(255,255,255,0.42)' : '0 2px 10px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.08)'};
+      ${liquidSheen}
+      transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.12s ease;
     }
-    #qusa-style-fab:active {
-      cursor: grabbing;
+    #qusa-style-fab.qusa-fab-floating {
+      position: fixed;
+      left: 14px;
+      bottom: 12px;
+      z-index: 99998;
+    }
+    #qusa-style-fab.qusa-fab-docked {
+      position: static;
+      margin-left: auto;
+      z-index: 5;
     }
     #qusa-style-fab:hover {
-      border-color: rgba(255, 255, 255, 0.28);
+      border-color: rgba(255, 255, 255, 0.36);
+      transform: translateY(-0.5px);
     }
     #qusa-fab-dot {
       width: 10px;
@@ -577,11 +685,14 @@ function injectStyles(cfg) {
       max-width: 94vw;
       max-height: 88vh;
       overflow-y: auto;
-      background: rgb(${modalBg[0]}, ${modalBg[1]}, ${modalBg[2]});
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 14px;
+      background: rgba(${modalBg[0]}, ${modalBg[1]}, ${modalBg[2]}, ${isLiquid ? '0.48' : '0.72'});
+      backdrop-filter: ${glassFilter};
+      -webkit-backdrop-filter: ${glassFilter};
+      border: 1px solid ${glassBorder};
+      border-radius: ${isLiquid ? '20px' : '14px'};
       padding: 18px 20px;
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+      box-shadow: ${glassShadow};
+      ${liquidSheen}
     }
     .qusa-modal-header {
       display: flex;
@@ -753,6 +864,229 @@ function injectStyles(cfg) {
       margin-top: 14px;
       padding-top: 10px;
       border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    /* Spotify Dynamic Island */
+    #qusa-spotify-island {
+      position: fixed;
+      top: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 99995;
+      display: none;
+      flex-direction: column;
+      background: rgba(14, 18, 26, ${isLiquid ? '0.32' : '0.50'});
+      backdrop-filter: ${glassFilter};
+      -webkit-backdrop-filter: ${glassFilter};
+      border: 1px solid ${glassBorder};
+      border-radius: ${isLiquid ? '22px' : '18px'};
+      padding: 4px 10px;
+      color: #f1f5f9;
+      font-family: system-ui, -apple-system, sans-serif;
+      box-shadow: ${glassShadow};
+      ${liquidSheen}
+      transition: width 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+                  border-color 0.25s ease,
+                  box-shadow 0.25s ease,
+                  padding 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+                  border-radius 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+      width: 278px;
+      max-width: 90vw;
+      overflow: hidden;
+      user-select: none;
+      -webkit-app-region: no-drag;
+    }
+    #qusa-spotify-island.visible {
+      display: flex;
+    }
+    #qusa-spotify-island.playing {
+      border-color: rgba(29, 185, 84, 0.38);
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.48), 0 0 14px rgba(29, 185, 84, 0.14);
+    }
+    #qusa-spotify-island:hover, #qusa-spotify-island.expanded {
+      width: 326px;
+      padding: 8px 12px 10px;
+      border-radius: 16px;
+    }
+    .qsp-compact {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 22px;
+    }
+    .qsp-art {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      background: rgba(29, 185, 84, 0.16);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
+      transition: width 0.26s cubic-bezier(0.22, 1, 0.36, 1), height 0.26s cubic-bezier(0.22, 1, 0.36, 1), border-radius 0.26s ease;
+    }
+    #qusa-spotify-island:hover .qsp-art, #qusa-spotify-island.expanded .qsp-art {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+    }
+    .qsp-art img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .qsp-meta {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      line-height: 1.2;
+    }
+    .qsp-title {
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #f8fafc;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .qsp-artist {
+      font-size: 10px;
+      color: #94a3b8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .qsp-mini-btns {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      flex-shrink: 0;
+      max-width: 82px;
+      opacity: 1;
+      overflow: hidden;
+      transition: max-width 0.24s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s ease;
+    }
+    #qusa-spotify-island:hover .qsp-mini-btns, #qusa-spotify-island.expanded .qsp-mini-btns {
+      max-width: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .qsp-btn {
+      background: transparent;
+      border: none;
+      color: #cbd5e1;
+      width: 24px;
+      height: 24px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 0;
+      transition: background-color 0.12s ease, color 0.12s ease, transform 0.1s ease;
+    }
+    .qsp-btn:hover {
+      background: rgba(255, 255, 255, 0.10);
+      color: #ffffff;
+    }
+    .qsp-btn:active {
+      transform: scale(0.92);
+    }
+    .qsp-btn.primary {
+      background: #1db954;
+      color: #07120a;
+      width: 28px;
+      height: 28px;
+      font-weight: 700;
+    }
+    .qsp-btn.primary:hover {
+      background: #1ed760;
+      color: #051008;
+    }
+    .qsp-btn.active {
+      color: #1db954;
+    }
+    .qsp-btn.liked {
+      color: #ff6ba9;
+    }
+    .qsp-expand {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 0;
+      opacity: 0;
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 1px solid transparent;
+      transform: translateY(-4px);
+      overflow: hidden;
+      pointer-events: none;
+      transition: max-height 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+                  opacity 0.22s ease,
+                  margin-top 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+                  padding-top 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+                  transform 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+                  border-color 0.22s ease;
+    }
+    #qusa-spotify-island:hover .qsp-expand, #qusa-spotify-island.expanded .qsp-expand {
+      max-height: 112px;
+      opacity: 1;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top-color: rgba(255, 255, 255, 0.08);
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+    .qsp-controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    .qsp-quick {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .qsp-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 5px 8px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      color: #e2e8f0;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.12s ease, border-color 0.12s ease;
+    }
+    .qsp-chip:hover {
+      background: rgba(29, 185, 84, 0.16);
+      border-color: rgba(29, 185, 84, 0.42);
+      color: #ffffff;
+    }
+    .qsp-eq {
+      display: inline-flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 14px;
+      margin-left: 2px;
+      flex-shrink: 0;
+    }
+    .qsp-eq i {
+      width: 2.5px;
+      background: #1db954;
+      border-radius: 1.5px;
+      height: 3px;
+      display: block;
+      transition: height 85ms ease-out;
     }
 
     /* Weather Physics Overlay Canvas */
@@ -1006,7 +1340,7 @@ function applySurfaceColors(cfg) {
   const els = document.querySelectorAll('div, main, section, aside, nav, header, footer, pre, form');
   for (const el of els) {
     if (el.id && el.id.startsWith('qusa-')) continue;
-    if (el.closest('#qusa-theme-modal, #qusa-style-fab, #qusa-telemetry-bar, #qusa-bg-layer, #qusa-anty')) continue;
+    if (el.closest('#qusa-theme-modal, #qusa-style-fab, #qusa-telemetry-bar, #qusa-bg-layer, #qusa-anty, #qusa-spotify-island')) continue;
     if (el.matches(INTERACTIVE_SELECTOR)) continue;
 
     let origStr = el.getAttribute('data-qusa-orig-bg');
@@ -1059,21 +1393,21 @@ function applySurfaceColors(cfg) {
 
       const isPopup = Boolean(el.matches('[role="listbox"], [role="menu"], [role="dialog"]') || el.closest('[role="listbox"], [role="menu"], [role="dialog"]'));
       const clsStr = typeof el.className === 'string' ? el.className : '';
-      const isInsideSidebar = Boolean(el.parentElement && el.parentElement.closest('[data-qusa-role="sidebar"]'));
-      const isSidebarItem = !isPopup && (
+      const isHeader = !isPopup && (
+        el.tagName === 'HEADER' ||
+        (rect.top <= 42 && rect.height <= 48 && rect.width > window.innerWidth * 0.4)
+      );
+      const isInsideSidebar = !isHeader && Boolean(el.parentElement && el.parentElement.closest('[data-qusa-role="sidebar"]'));
+      const isSidebarItem = !isPopup && !isHeader && (
         (isInsideSidebar && rect.height <= 56) ||
         (rect.left <= 36 && rect.right <= 390 && rect.width >= 100 && rect.height >= 18 && rect.height <= 56 && rect.top >= 48)
       );
-      const isSidebar = !isPopup && !isSidebarItem && (
+      const isSidebar = !isPopup && !isHeader && !isSidebarItem && (
         el.tagName === 'ASIDE' ||
         el.tagName === 'NAV' ||
         Boolean(el.closest('aside, nav, [data-qusa-role="sidebar"]')) ||
         /sidebar/i.test(clsStr) ||
         (rect.left <= 24 && rect.right <= 390 && rect.width >= 140 && rect.height > window.innerHeight * 0.35)
-      );
-      const isHeader = !isPopup && !isSidebar && !isSidebarItem && (
-        el.tagName === 'HEADER' ||
-        (rect.top <= 48 && rect.height <= 64 && rect.width > window.innerWidth * 0.4)
       );
       const borderRad = parseFloat(cs.borderRadius) || 0;
       const isCard = !isPopup && !isSidebar && !isSidebarItem && !isHeader && (
@@ -1081,7 +1415,7 @@ function applySurfaceColors(cfg) {
         el.tagName === 'FORM' ||
         (borderRad >= 8 && rect.width < window.innerWidth * 0.72 && rect.height < window.innerHeight * 0.75)
       );
-      role = isPopup ? 'popup' : isSidebarItem ? 'sidebar-item' : isSidebar ? 'sidebar' : isHeader ? 'header' : isCard ? 'card' : 'canvas';
+      role = isPopup ? 'popup' : isHeader ? 'header' : isSidebarItem ? 'sidebar-item' : isSidebar ? 'sidebar' : isCard ? 'card' : 'canvas';
       el.setAttribute('data-qusa-role', role);
       if (role === 'sidebar' && rect.height > window.innerHeight * 0.5 && !(el.parentElement && el.parentElement.closest('[data-qusa-sidebar-root="1"]'))) {
         el.setAttribute('data-qusa-sidebar-root', '1');
@@ -1093,7 +1427,7 @@ function applySurfaceColors(cfg) {
       continue;
     }
 
-    if (wpActive && (role === 'canvas' || role === 'sidebar-item')) {
+    if (wpActive && (role === 'canvas' || role === 'sidebar-item' || role === 'header')) {
       el.style.setProperty('background-color', 'transparent', 'important');
       continue;
     }
@@ -1113,12 +1447,17 @@ function applySurfaceColors(cfg) {
     const shifted = shiftRgb(targetRgb, delta);
 
     let outAlpha = origA;
+    const isLiquid = cfg.glassStyle === 'liquid';
     if (wpActive) {
       if (role === 'popup') {
-        outAlpha = Math.max(0.92, pAlpha);
+        outAlpha = isLiquid ? Math.min(0.46, Math.max(0.28, pAlpha * 0.72)) : Math.min(0.68, Math.max(0.45, pAlpha));
+      } else if (role === 'sidebar') {
+        outAlpha = isLiquid ? Math.max(0.38, pAlpha * 0.90) : pAlpha;
       } else {
-        outAlpha = pAlpha;
+        outAlpha = isLiquid ? Math.max(0.22, pAlpha * 0.72) : pAlpha;
       }
+    } else if (role === 'popup') {
+      outAlpha = isLiquid ? 0.52 : 0.72;
     }
 
     const colorVal = outAlpha < 1
@@ -1292,7 +1631,7 @@ function applyAccountNameToString(raw, customName, parentEl) {
 
 function shouldSkipTextNode(el) {
   if (!el) return true;
-  if (el.closest && el.closest('pre, code, .prose, [contenteditable="true"], [data-lexical-editor], [data-testid*="drag"], [data-qusa-skip], #qusa-theme-modal, #qusa-style-fab, #qusa-telemetry-bar, #qusa-anty')) {
+  if (el.closest && el.closest('pre, code, .prose, [contenteditable="true"], [data-lexical-editor], [data-testid*="drag"], [data-qusa-skip], #qusa-theme-modal, #qusa-style-fab, #qusa-telemetry-bar, #qusa-anty, #qusa-spotify-island')) {
     return true;
   }
   return false;
@@ -1319,21 +1658,23 @@ function applyModelRenamesToString(raw, pairs) {
 
 function translateTextValue(raw) {
   if (!raw) return raw;
-  const trimmed = raw.trim();
+  const trimmed = raw.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
   if (!trimmed) return raw;
   if (RU_DICT[trimmed]) return raw.replace(trimmed, RU_DICT[trimmed]);
-  // Compact sidebar relative timestamps: "2m", "3h", "1d", "2mo"
-  const shortTime = trimmed.match(/^(\d+)\s*(mo|m|h|d)$/i);
+  if (/^now$/i.test(trimmed)) return raw.replace(trimmed, trimmed[0] === 'N' ? 'Сейчас' : 'сейчас');
+  if (/^just\s+now$/i.test(trimmed)) return raw.replace(trimmed, trimmed[0] === 'J' ? 'Только что' : 'только что');
+  // Compact sidebar relative timestamps: "5s", "2m", "3h", "1d", "2w", "2mo", "1y"
+  const shortTime = trimmed.match(/^(\d+)\s*(mo|s|m|h|d|w|y)$/i);
   if (shortTime) {
     const u = shortTime[2].toLowerCase();
-    const uMap = { m: 'м.', h: 'ч.', d: 'д.', mo: 'мес.' };
+    const uMap = { s: 'с.', m: 'м.', h: 'ч.', d: 'д.', w: 'нед.', mo: 'мес.', y: 'г.' };
     return raw.replace(trimmed, `${shortTime[1]}${uMap[u]}`);
   }
   if (/^[a-z0-9-]+$/.test(trimmed)) return raw;
-  const agoMatch = trimmed.match(/^(\d+)([mhd])\s+ago$/);
+  const agoMatch = trimmed.match(/^(\d+)([smhdwy])\s+ago$/i);
   if (agoMatch) {
-    const unitMap = { m: 'м назад', h: 'ч назад', d: 'д назад' };
-    return raw.replace(trimmed, `${agoMatch[1]}${unitMap[agoMatch[2]]}`);
+    const unitMap = { s: 'с назад', m: 'м назад', h: 'ч назад', d: 'д назад', w: 'нед назад', y: 'г назад' };
+    return raw.replace(trimmed, `${agoMatch[1]}${unitMap[agoMatch[2].toLowerCase()]}`);
   }
   if (trimmed.startsWith('Thought for ')) return raw.replace('Thought for ', 'Думал ');
   if (trimmed.startsWith('Running ')) return raw.replace('Running ', 'Выполняю: ');
@@ -1448,60 +1789,82 @@ function applyTextTransforms(root, cfg) {
 
 // --- Settings UI ---
 
+function dockStyleButtonInSidebar() {
+  const fab = document.getElementById('qusa-style-fab');
+  if (!fab) return;
+  // Find the "Settings" / "Настройки" button at the bottom of the sidebar
+  const candidates = document.querySelectorAll('button, a, [role="button"]');
+  let settingsBtn = null;
+  for (const el of candidates) {
+    if (el.id === 'qusa-style-fab' || el.closest('#qusa-theme-modal, #qusa-spotify-island')) continue;
+    const txt = (el.textContent || '').trim();
+    if (txt !== 'Settings' && txt !== 'Настройки') continue;
+    const r = el.getBoundingClientRect();
+    if (r.width > 0 && r.left <= 60 && r.right <= 360 && r.bottom >= window.innerHeight - 100) {
+      settingsBtn = el;
+      break;
+    }
+  }
+  if (settingsBtn && settingsBtn.parentElement) {
+    const host = settingsBtn.parentElement;
+    const otherChildren = Array.from(host.children).filter((c) => c !== fab);
+    if (otherChildren.length === 1 && otherChildren[0] === settingsBtn) {
+      host.style.setProperty('display', 'flex', 'important');
+      host.style.setProperty('flex-direction', 'row', 'important');
+      host.style.setProperty('align-items', 'center', 'important');
+      host.style.setProperty('justify-content', 'space-between', 'important');
+      host.style.setProperty('gap', '6px', 'important');
+      settingsBtn.style.setProperty('flex', '1 1 auto', 'important');
+      settingsBtn.style.setProperty('width', 'auto', 'important');
+      settingsBtn.style.setProperty('min-width', '0', 'important');
+      if (fab.parentElement !== host) host.appendChild(fab);
+      fab.classList.remove('qusa-fab-floating');
+      fab.classList.add('qusa-fab-docked');
+      fab.style.position = '';
+      fab.style.left = '';
+      fab.style.top = '';
+      fab.style.right = '';
+      fab.style.transform = '';
+    } else {
+      const hostPos = window.getComputedStyle(host).position;
+      if (hostPos === 'static') host.style.position = 'relative';
+      if (fab.parentElement !== host) host.appendChild(fab);
+      fab.classList.remove('qusa-fab-floating');
+      fab.classList.add('qusa-fab-docked');
+      const btnCenterY = settingsBtn.offsetTop + settingsBtn.offsetHeight / 2;
+      fab.style.position = 'absolute';
+      fab.style.right = '10px';
+      fab.style.top = `${Math.round(btnCenterY)}px`;
+      fab.style.left = '';
+      fab.style.transform = 'translateY(-50%)';
+    }
+  } else if (fab.parentElement !== document.body) {
+    document.body.appendChild(fab);
+    fab.classList.remove('qusa-fab-docked');
+    fab.classList.add('qusa-fab-floating');
+    fab.style.position = '';
+    fab.style.left = '';
+    fab.style.top = '';
+    fab.style.right = '';
+    fab.style.transform = '';
+  }
+}
+
 function createStyleUI(cfg) {
   if (!document.getElementById('qusa-style-fab')) {
     const fab = document.createElement('button');
     fab.id = 'qusa-style-fab';
+    fab.className = 'qusa-fab-floating';
     fab.type = 'button';
+    fab.title = 'Настройки стиля (Alt+S — скрыть/показать)';
     fab.innerHTML = `<span id="qusa-fab-dot"></span><span>Стиль</span>`;
-    if (cfg.fabLeft !== null && cfg.fabTop !== null) {
-      fab.style.left = `${cfg.fabLeft}px`;
-      fab.style.top = `${cfg.fabTop}px`;
-      fab.style.right = 'auto';
-    }
-    let isDragging = false;
-    let moved = false;
-    let startX = 0, startY = 0, origLeft = 0, origTop = 0;
-    fab.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return;
-      isDragging = true;
-      moved = false;
-      const rect = fab.getBoundingClientRect();
-      startX = e.clientX;
-      startY = e.clientY;
-      origLeft = rect.left;
-      origTop = rect.top;
-      e.preventDefault();
-    });
-    window.addEventListener('mousemove', (e) => {
-      if (!isDragging) return;
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
-      if (moved) {
-        const nextLeft = Math.max(4, Math.min(window.innerWidth - fab.offsetWidth - 4, origLeft + dx));
-        const nextTop = Math.max(4, Math.min(window.innerHeight - fab.offsetHeight - 4, origTop + dy));
-        fab.style.left = `${nextLeft}px`;
-        fab.style.top = `${nextTop}px`;
-        fab.style.right = 'auto';
-      }
-    });
-    window.addEventListener('mouseup', () => {
-      if (!isDragging) return;
-      isDragging = false;
-      if (moved) {
-        const rect = fab.getBoundingClientRect();
-        cfg.fabLeft = Math.round(rect.left);
-        cfg.fabTop = Math.round(rect.top);
-        saveConfig(cfg, true);
-      }
-    });
-    fab.addEventListener('click', () => {
-      if (moved) return;
+    fab.addEventListener('click', (e) => {
+      e.stopPropagation();
       const modal = document.getElementById('qusa-theme-modal');
       if (modal) modal.classList.add('open');
     });
     document.body.appendChild(fab);
+    dockStyleButtonInSidebar();
   }
 
   if (!document.getElementById('qusa-theme-modal')) {
@@ -1537,6 +1900,14 @@ function createStyleUI(cfg) {
         <div class="qusa-row">
           <span>Отделить сайдбар от верхней полосы</span>
           <input type="checkbox" id="qusa-detached-sidebar" />
+        </div>
+
+        <div class="qusa-field" style="border-top:1px solid rgba(255,255,255,0.06);padding-top:10px;margin-top:4px;">
+          <label><span>Стиль стекла</span></label>
+          <div class="qusa-seg-row" id="qusa-glass-seg" style="grid-template-columns:1fr 1fr;">
+            <button type="button" class="qusa-seg-btn" data-glass="frosted">🌫 Frosted Glass</button>
+            <button type="button" class="qusa-seg-btn" data-glass="liquid">💧 Liquid Glass</button>
+          </div>
         </div>
 
         <div class="qusa-field" id="qusa-sidebar-field" style="display:none;margin-top:6px;">
@@ -1587,6 +1958,11 @@ function createStyleUI(cfg) {
         <div class="qusa-row">
           <span>Перевод мыслей и шагов (Google Translate)</span>
           <input type="checkbox" id="qusa-thoughts-ru-toggle" />
+        </div>
+
+        <div class="qusa-row">
+          <span>Островок Spotify (если запущен)</span>
+          <input type="checkbox" id="qusa-spotify-toggle" />
         </div>
 
         <div class="qusa-row">
@@ -1677,6 +2053,7 @@ function createStyleUI(cfg) {
     const baseHex = document.getElementById('qusa-base-hex');
     const sepSidebarEl = document.getElementById('qusa-sep-sidebar');
     const detachedSidebarEl = document.getElementById('qusa-detached-sidebar');
+    const glassSeg = document.getElementById('qusa-glass-seg');
     const sidebarField = document.getElementById('qusa-sidebar-field');
     const sidebarPicker = document.getElementById('qusa-sidebar-picker');
     const sidebarHex = document.getElementById('qusa-sidebar-hex');
@@ -1695,6 +2072,7 @@ function createStyleUI(cfg) {
     const wpBlurVal = document.getElementById('qusa-wp-blur-val');
     const ruToggle = document.getElementById('qusa-ru-toggle');
     const thoughtsRuToggle = document.getElementById('qusa-thoughts-ru-toggle');
+    const spotifyToggle = document.getElementById('qusa-spotify-toggle');
     const fabHiddenToggle = document.getElementById('qusa-fab-hidden-toggle');
     const hotkeyBtn = document.getElementById('qusa-hotkey-btn');
     const hotkeyResetBtn = document.getElementById('qusa-hotkey-reset-btn');
@@ -1808,6 +2186,10 @@ function createStyleUI(cfg) {
       baseHex.value = cfg.baseColor;
       sepSidebarEl.checked = Boolean(cfg.separateSidebar);
       detachedSidebarEl.checked = cfg.detachedSidebar !== false;
+      const curGlass = cfg.glassStyle === 'liquid' ? 'liquid' : 'frosted';
+      glassSeg.querySelectorAll('.qusa-seg-btn').forEach((b) => {
+        b.classList.toggle('active', b.getAttribute('data-glass') === curGlass);
+      });
       sidebarField.style.display = cfg.separateSidebar ? 'block' : 'none';
       sidebarPicker.value = cfg.sidebarColor;
       sidebarHex.value = cfg.sidebarColor;
@@ -1822,6 +2204,7 @@ function createStyleUI(cfg) {
       wpBlurVal.textContent = `${cfg.wallpaperBlur || 0}px`;
       ruToggle.checked = Boolean(cfg.ruEnabled);
       thoughtsRuToggle.checked = Boolean(cfg.translateThoughts);
+      spotifyToggle.checked = cfg.spotifyIsland !== false;
       fabHiddenToggle.checked = Boolean(cfg.fabHidden);
       hotkeyBtn.textContent = formatHotkey(cfg.fabHotkey || 'Alt+KeyS');
       accountNameInput.value = cfg.customAccountName || '';
@@ -1883,6 +2266,16 @@ function createStyleUI(cfg) {
     detachedSidebarEl.addEventListener('change', () => {
       cfg.detachedSidebar = detachedSidebarEl.checked;
       applyAll(true);
+    });
+
+    glassSeg.querySelectorAll('.qusa-seg-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        cfg.glassStyle = btn.getAttribute('data-glass') === 'liquid' ? 'liquid' : 'frosted';
+        glassSeg.querySelectorAll('.qusa-seg-btn').forEach((b) => {
+          b.classList.toggle('active', b === btn);
+        });
+        applyAll(true);
+      });
     });
 
     sidebarPicker.addEventListener('input', () => {
@@ -1970,6 +2363,12 @@ function createStyleUI(cfg) {
       cfg.translateThoughts = thoughtsRuToggle.checked;
       saveConfig(cfg, true);
       applyTextTransforms(document.body, cfg);
+    });
+
+    spotifyToggle.addEventListener('change', () => {
+      cfg.spotifyIsland = spotifyToggle.checked;
+      saveConfig(cfg, true);
+      if (window.__qusaUpdateSpotify) window.__qusaUpdateSpotify(cfg);
     });
 
     fabHiddenToggle.addEventListener('change', () => {
@@ -3073,6 +3472,245 @@ function initWeatherEffect(cfg) {
   }
 }
 
+// --- Spotify Dynamic Island ---
+
+const SPOTIFY_LOGO_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" fill="#1db954"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.59 14.42c-.18.3-.56.39-.86.21-2.35-1.44-5.31-1.76-8.8-.96-.34.08-.68-.13-.76-.47-.08-.34.13-.68.47-.76 3.82-.87 7.1-.5 9.74 1.12.3.18.39.56.21.86zm1.22-2.72c-.23.37-.71.49-1.08.26-2.69-1.65-6.79-2.13-9.97-1.17-.42.13-.86-.11-.99-.53-.13-.42.11-.86.53-.99 3.63-1.1 8.14-.57 11.24 1.34.37.23.49.71.27 1.09zm.11-2.83C14.69 8.95 9.37 8.77 6.29 9.71c-.5.15-1.02-.13-1.17-.62-.15-.5.13-1.02.62-1.17 3.53-1.07 9.41-.86 13.12 1.34.45.27.59.84.33 1.29-.27.44-.84.59-1.27.32z"/></svg>`;
+
+const QSP_ICON_REPEAT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>`;
+const QSP_ICON_REPEAT_LIST = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/><circle cx="12" cy="22" r="1.4" fill="currentColor" stroke="none"/></svg>`;
+const QSP_ICON_REPEAT_ONE = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/><path d="M11 10h1v4"/></svg>`;
+
+function initSpotifyIsland(cfg) {
+  if (document.getElementById('qusa-spotify-island')) return;
+  if (!window.qusaPersist || typeof window.qusaPersist.spotifyState !== 'function') return;
+
+  const el = document.createElement('div');
+  el.id = 'qusa-spotify-island';
+  el.innerHTML = `
+    <div class="qsp-compact">
+      <div class="qsp-art" id="qsp-art">${SPOTIFY_LOGO_SVG}</div>
+      <div class="qsp-meta">
+        <div class="qsp-title" id="qsp-title">Spotify</div>
+        <div class="qsp-artist" id="qsp-artist">Ожидание трека...</div>
+      </div>
+      <div class="qsp-eq" id="qsp-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <div class="qsp-mini-btns">
+        <button class="qsp-btn" id="qsp-mini-prev" type="button" title="Предыдущий">⏮</button>
+        <button class="qsp-btn" id="qsp-mini-play" type="button" title="Пауза / Воспроизвести">▶</button>
+        <button class="qsp-btn" id="qsp-mini-next" type="button" title="Следующий">⏭</button>
+      </div>
+    </div>
+    <div class="qsp-expand">
+      <div class="qsp-controls">
+        <button class="qsp-btn" id="qsp-btn-repeat" type="button" title="Повтор (Выкл / Плейлист / Трек)">${QSP_ICON_REPEAT}</button>
+        <button class="qsp-btn" id="qsp-btn-prev" type="button" title="Предыдущий трек">⏮</button>
+        <button class="qsp-btn primary" id="qsp-btn-play" type="button" title="Пауза / Воспроизвести">▶</button>
+        <button class="qsp-btn" id="qsp-btn-next" type="button" title="Следующий трек">⏭</button>
+        <button class="qsp-btn" id="qsp-btn-like" type="button" title="Добавить текущий трек в Избранное">♡</button>
+      </div>
+      <div class="qsp-quick">
+        <button class="qsp-chip" id="qsp-open-liked" type="button" title="Открыть Избранное в Spotify">♥ Избранное</button>
+        <button class="qsp-chip" id="qsp-open-dj" type="button" title="Запустить Spotify DJ">🎧 DJ</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(el);
+
+  const artEl = document.getElementById('qsp-art');
+  const titleEl = document.getElementById('qsp-title');
+  const artistEl = document.getElementById('qsp-artist');
+  const miniPlay = document.getElementById('qsp-mini-play');
+  const btnPlay = document.getElementById('qsp-btn-play');
+  const btnRepeat = document.getElementById('qsp-btn-repeat');
+  const btnLike = document.getElementById('qsp-btn-like');
+  const eqBars = Array.from(document.querySelectorAll('#qsp-eq i'));
+
+  let lastCover = '';
+  let currentTrackKey = '';
+  const likedTracks = new Set(Array.isArray(cfg.spotifyLiked) ? cfg.spotifyLiked : []);
+  let pollBusy = false;
+
+  const syncLikeBtn = () => {
+    const isLiked = Boolean(currentTrackKey && likedTracks.has(currentTrackKey));
+    btnLike.classList.toggle('liked', isLiked);
+    btnLike.textContent = isLiked ? '♥' : '♡';
+    btnLike.title = isLiked ? 'Убрать трек из Избранного' : 'Добавить текущий трек в Избранное';
+  };
+  let peakBusy = false;
+  let actionBusy = false;
+  let isCurrentlyPlaying = false;
+  let isCurrentlyVisible = false;
+  let smoothBars = [3, 3, 3, 3];
+
+  const updateEqBars = (peaks) => {
+    if (!eqBars.length) return;
+    if (!isCurrentlyPlaying || !Array.isArray(peaks) || peaks.length === 0) {
+      for (let i = 0; i < eqBars.length; i++) {
+        smoothBars[i] = 3;
+        eqBars[i].style.height = '3px';
+      }
+      return;
+    }
+    const l = Number(peaks[0] || 0);
+    const m = Number(peaks[1] || l);
+    const r = Number(peaks[2] || l);
+    // Boost perceptual curve (pow 0.65) so quiet & loud passages both look lively and accurate
+    const toH = (v, jitter) => {
+      const norm = Math.min(1, Math.pow(Math.max(0, v * 1.45), 0.68) * jitter);
+      return Math.max(3, Math.min(14, Math.round(3 + norm * 11)));
+    };
+    const rawTargets = [
+      toH(l, 0.92 + Math.random() * 0.16),
+      toH(m, 1.02 + Math.random() * 0.14),
+      toH((l + r) * 0.5, 0.88 + Math.random() * 0.22),
+      toH(r, 0.95 + Math.random() * 0.15),
+    ];
+    for (let i = 0; i < eqBars.length; i++) {
+      const target = rawTargets[i] || 3;
+      smoothBars[i] = target >= smoothBars[i] ? target : Math.max(3, smoothBars[i] * 0.6 + target * 0.4);
+      eqBars[i].style.height = `${Math.round(smoothBars[i])}px`;
+    }
+  };
+
+  const renderState = (st) => {
+    if (cfg.spotifyIsland === false) {
+      isCurrentlyVisible = false;
+      isCurrentlyPlaying = false;
+      el.classList.remove('visible', 'playing');
+      updateEqBars(null);
+      return;
+    }
+    if (!st) return; // bridge busy, keep current UI state untouched
+    if (!st.running) {
+      isCurrentlyVisible = false;
+      isCurrentlyPlaying = false;
+      el.classList.remove('visible', 'playing');
+      updateEqBars(null);
+      return;
+    }
+    isCurrentlyVisible = true;
+    el.classList.add('visible');
+    isCurrentlyPlaying = st.status === 'Playing';
+    el.classList.toggle('playing', isCurrentlyPlaying);
+
+    const playGlyph = isCurrentlyPlaying ? '⏸' : '▶';
+    miniPlay.textContent = playGlyph;
+    btnPlay.textContent = playGlyph;
+
+    if (st.hasSession && (st.title || st.artist)) {
+      titleEl.textContent = st.title || 'Без названия';
+      artistEl.textContent = st.artist || 'Spotify';
+      const nextKey = (st.title || st.artist || '').trim().toLowerCase();
+      if (nextKey !== currentTrackKey) {
+        currentTrackKey = nextKey;
+        syncLikeBtn();
+      }
+    } else {
+      titleEl.textContent = 'Spotify открыт';
+      artistEl.textContent = 'Выбери Избранное или DJ';
+      if (currentTrackKey) {
+        currentTrackKey = '';
+        syncLikeBtn();
+      }
+    }
+
+    const rep = st.repeat || 'None';
+    btnRepeat.classList.toggle('active', rep !== 'None');
+    btnRepeat.innerHTML = rep === 'Track' ? QSP_ICON_REPEAT_ONE : rep === 'List' ? QSP_ICON_REPEAT_LIST : QSP_ICON_REPEAT;
+    btnRepeat.title = rep === 'Track' ? 'Повтор: 1 трек' : rep === 'List' ? 'Повтор: плейлист' : 'Повтор: выкл';
+
+    if (st.peaks) updateEqBars(st.peaks);
+
+    const cov = st.cover || '';
+    if (cov !== lastCover) {
+      lastCover = cov;
+      artEl.innerHTML = cov ? `<img src="${cov}" alt="" />` : SPOTIFY_LOGO_SVG;
+    }
+  };
+
+  const poll = async () => {
+    if (document.hidden || cfg.spotifyIsland === false || pollBusy || actionBusy) return;
+    pollBusy = true;
+    try {
+      const st = await window.qusaPersist.spotifyState();
+      if (st) renderState(st);
+    } catch {}
+    pollBusy = false;
+  };
+
+  const pollPeak = async () => {
+    if (document.hidden || cfg.spotifyIsland === false || !isCurrentlyVisible || !isCurrentlyPlaying || peakBusy || pollBusy || actionBusy) return;
+    if (typeof window.qusaPersist.spotifyPeak !== 'function') return;
+    peakBusy = true;
+    try {
+      const res = await window.qusaPersist.spotifyPeak();
+      if (res && res.peaks) updateEqBars(res.peaks);
+    } catch {}
+    peakBusy = false;
+  };
+
+  const runAction = async (cmd) => {
+    actionBusy = true;
+    try {
+      const st = await window.qusaPersist.spotifyAction(cmd);
+      if (st) renderState(st);
+      if (cmd === 'next' || cmd === 'prev' || cmd === 'playpause') {
+        setTimeout(() => { void poll(); }, 280);
+        setTimeout(() => { void poll(); }, 700);
+      }
+    } catch {}
+    actionBusy = false;
+  };
+
+  document.getElementById('qsp-mini-prev').addEventListener('click', (e) => { e.stopPropagation(); void runAction('prev'); });
+  document.getElementById('qsp-mini-play').addEventListener('click', (e) => { e.stopPropagation(); void runAction('playpause'); });
+  document.getElementById('qsp-mini-next').addEventListener('click', (e) => { e.stopPropagation(); void runAction('next'); });
+  document.getElementById('qsp-btn-prev').addEventListener('click', () => { void runAction('prev'); });
+  document.getElementById('qsp-btn-play').addEventListener('click', () => { void runAction('playpause'); });
+  document.getElementById('qsp-btn-next').addEventListener('click', () => { void runAction('next'); });
+  document.getElementById('qsp-btn-repeat').addEventListener('click', () => { void runAction('repeat'); });
+
+  btnLike.addEventListener('click', async () => {
+    if (!currentTrackKey) return;
+    if (likedTracks.has(currentTrackKey)) {
+      likedTracks.delete(currentTrackKey);
+    } else {
+      likedTracks.add(currentTrackKey);
+      if (likedTracks.size > 300) {
+        const first = likedTracks.values().next().value;
+        if (first) likedTracks.delete(first);
+      }
+    }
+    cfg.spotifyLiked = Array.from(likedTracks);
+    saveConfig(cfg, true);
+    syncLikeBtn();
+    await runAction('like');
+  });
+
+  document.getElementById('qsp-open-liked').addEventListener('click', () => {
+    void window.qusaPersist.spotifyOpen('spotify:collection:tracks');
+  });
+
+  document.getElementById('qsp-open-dj').addEventListener('click', () => {
+    void window.qusaPersist.spotifyOpen('spotify:playlist:37i9dQZF1EYkqdzj48dyYq');
+  });
+
+  window.__qusaUpdateSpotify = (newCfg) => {
+    cfg = newCfg;
+    if (cfg.spotifyIsland === false) {
+      isCurrentlyVisible = false;
+      isCurrentlyPlaying = false;
+      el.classList.remove('visible', 'playing');
+    } else {
+      void poll();
+    }
+  };
+
+  void poll();
+  setInterval(() => { void poll(); }, 300);
+  setInterval(() => { void pollPeak(); }, 95);
+}
+
 function initQusaCustomUI() {
   const boot = async () => {
     if (!document.head || !document.body) return;
@@ -3087,21 +3725,26 @@ function initQusaCustomUI() {
       }
     }
 
+    ensureLiquidGlassFilter();
     injectStyles(cfg);
     updateWallpaperLayer(cfg);
     createStyleUI(cfg);
     initAntyMascot(cfg);
     initWeatherEffect(cfg);
+    initSpotifyIsland(cfg);
     if (window.__qusaSyncWpStatus) window.__qusaSyncWpStatus();
     applySurfaceColors(cfg);
     applyTextTransforms(document.body, cfg);
+    dockStyleButtonInSidebar();
     setTimeout(() => {
       applySurfaceColors(cfg);
       applyTextTransforms(document.body, cfg);
+      dockStyleButtonInSidebar();
     }, 600);
     setTimeout(() => {
       applySurfaceColors(cfg);
       applyTextTransforms(document.body, cfg);
+      dockStyleButtonInSidebar();
     }, 1800);
 
     window.addEventListener('beforeunload', () => {
@@ -3158,6 +3801,7 @@ function initQusaCustomUI() {
         recolorTimer = setTimeout(() => {
           recolorTimer = null;
           applySurfaceColors(cfg);
+          dockStyleButtonInSidebar();
         }, 800);
       }
       const pairs = getActiveModelPairs(cfg);

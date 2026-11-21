@@ -18,6 +18,10 @@ electron_1.contextBridge.exposeInMainWorld('qusaPersist', {
     clearWallpaper: () => electron_1.ipcRenderer.invoke('qusa:clear-wallpaper'),
     translateText: (text) => electron_1.ipcRenderer.invoke('qusa:translate', text),
     translateBatch: (texts) => electron_1.ipcRenderer.invoke('qusa:translate-batch', texts),
+    spotifyState: () => electron_1.ipcRenderer.invoke('qusa:spotify-state'),
+    spotifyPeak: () => electron_1.ipcRenderer.invoke('qusa:spotify-peak'),
+    spotifyAction: (cmd) => electron_1.ipcRenderer.invoke('qusa:spotify-action', cmd),
+    spotifyOpen: (uri) => electron_1.ipcRenderer.invoke('qusa:spotify-open', uri),
 });
 """
 
@@ -187,9 +191,121 @@ UTILS_HOOK = """    if (!global.__qusaIpcRegistered) {
                     return map[clean] || clean;
                 } catch { return text; }
             });
+
+            // --- Spotify Native Windows GSMTC Bridge ---
+            const { spawn: qSpawn } = require('child_process');
+            const { app: qApp, shell: qShell } = require('electron');
+            const qSpBridgeSrc = qPath.join(__dirname, 'qusa_spotify_bridge.ps1');
+            const qSpBridgeDisk = qPath.join(qDir, 'qusa-spotify-bridge.ps1');
+            let qSpProc = null;
+            let qSpBuf = '';
+            const qSpQueue = [];
+
+            const ensureSpotifyBridge = () => {
+                if (process.platform !== 'win32') return null;
+                if (qSpProc && !qSpProc.killed) return qSpProc;
+                try {
+                    ensureDir();
+                    if (qFs.existsSync(qSpBridgeSrc)) {
+                        qFs.writeFileSync(qSpBridgeDisk, qFs.readFileSync(qSpBridgeSrc, 'utf8'), 'utf8');
+                    }
+                    if (!qFs.existsSync(qSpBridgeDisk)) return null;
+                    qSpProc = qSpawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', qSpBridgeDisk], {
+                        windowsHide: true,
+                        stdio: ['pipe', 'pipe', 'ignore'],
+                    });
+                    qSpBuf = '';
+                    qSpProc.stdout.setEncoding('utf8');
+                    qSpProc.stdout.on('data', (chunk) => {
+                        qSpBuf += chunk;
+                        let nl;
+                        while ((nl = qSpBuf.indexOf('\\n')) !== -1) {
+                            const line = qSpBuf.slice(0, nl).trim();
+                            qSpBuf = qSpBuf.slice(nl + 1);
+                            const waiter = qSpQueue.shift();
+                            if (waiter) {
+                                clearTimeout(waiter.timer);
+                                try { waiter.resolve(JSON.parse(line)); } catch { waiter.resolve({ running: false }); }
+                            }
+                        }
+                    });
+                    const clearAll = () => {
+                        qSpProc = null;
+                        while (qSpQueue.length > 0) {
+                            const w = qSpQueue.shift();
+                            clearTimeout(w.timer);
+                            w.resolve({ running: false });
+                        }
+                    };
+                    qSpProc.on('exit', clearAll);
+                    qSpProc.on('error', clearAll);
+                    return qSpProc;
+                } catch {
+                    qSpProc = null;
+                    return null;
+                }
+            };
+
+            if (qApp && typeof qApp.on === 'function') {
+                qApp.on('will-quit', () => {
+                    try {
+                        if (qSpProc && !qSpProc.killed) {
+                            qSpProc.stdin.write('exit\\n');
+                            qSpProc.kill();
+                        }
+                    } catch {}
+                });
+            }
+
+            const sendSpotifyCmd = (cmd) => new Promise((resolve) => {
+                const proc = ensureSpotifyBridge();
+                if (!proc || !proc.stdin || proc.stdin.destroyed) return resolve({ running: false });
+                if (qSpQueue.length > 6) return resolve(null);
+                const waiter = {
+                    resolve,
+                    timer: setTimeout(() => {
+                        const idx = qSpQueue.indexOf(waiter);
+                        if (idx !== -1) qSpQueue.splice(idx, 1);
+                        resolve(null);
+                    }, 3500),
+                };
+                qSpQueue.push(waiter);
+                try {
+                    proc.stdin.write(String(cmd) + '\\n');
+                } catch {
+                    const idx = qSpQueue.indexOf(waiter);
+                    if (idx !== -1) qSpQueue.splice(idx, 1);
+                    clearTimeout(waiter.timer);
+                    resolve(null);
+                }
+            });
+
+            qIpc.handle('qusa:spotify-state', () => sendSpotifyCmd('state'));
+            qIpc.handle('qusa:spotify-peak', () => sendSpotifyCmd('peak'));
+            qIpc.handle('qusa:spotify-action', (_ev, cmd) => {
+                const allowed = ['playpause', 'next', 'prev', 'repeat', 'like'];
+                if (!allowed.includes(cmd)) return { running: false };
+                return sendSpotifyCmd(cmd);
+            });
+            qIpc.handle('qusa:spotify-open', (_ev, uri) => {
+                try {
+                    const s = String(uri || '').trim();
+                    if (s.startsWith('spotify:')) {
+                        void qShell.openExternal(s);
+                        return true;
+                    }
+                } catch {}
+                return false;
+            });
         } catch (err) {
             console.error('[Qusa] Failed to register IPC:', err);
         }
+    }
+    if (process.platform === 'win32' && typeof win?.setTitleBarOverlay === 'function' && !win.__qusaOverlayPatched) {
+        win.__qusaOverlayPatched = true;
+        const origSetOverlay = win.setTitleBarOverlay.bind(win);
+        win.setTitleBarOverlay = (opts) => origSetOverlay({ ...(opts || {}), color: '#00000000', symbolColor: '#e2e8f0', height: (opts && opts.height) || 30 });
+        try { win.setTitleBarOverlay({}); } catch (_e) {}
     }
     hubContents.on('did-finish-load', () => {
         try {
@@ -286,6 +402,12 @@ def patch_asar(src_path: str, ui_js_path: str, out_path: str, force: bool = Fals
     with open(ui_js_path, "rb") as f:
         qusa_bytes = f.read()
 
+    sp_bridge_path = os.path.join(os.path.dirname(os.path.abspath(ui_js_path)), "qusa_spotify_bridge.ps1")
+    sp_bridge_bytes = None
+    if os.path.exists(sp_bridge_path):
+        with open(sp_bridge_path, "rb") as f:
+            sp_bridge_bytes = f.read()
+
     preload_raw = get_file_bytes(header, old_payload, ["dist", "preload.js"])
     utils_raw = get_file_bytes(header, old_payload, ["dist", "utils.js"])
     if preload_raw is None or utils_raw is None:
@@ -324,6 +446,12 @@ def patch_asar(src_path: str, ui_js_path: str, out_path: str, force: bool = Fals
         "offset": "0",
         "integrity": make_integrity(qusa_bytes),
     }
+    if sp_bridge_bytes is not None:
+        header["files"]["dist"]["files"]["qusa_spotify_bridge.ps1"] = {
+            "size": len(sp_bridge_bytes),
+            "offset": "0",
+            "integrity": make_integrity(sp_bridge_bytes),
+        }
 
     chunks = []
     cur_offset = 0
@@ -338,6 +466,9 @@ def patch_asar(src_path: str, ui_js_path: str, out_path: str, force: bool = Fals
                 return
             if path_parts == ["dist", "qusaCustomUI.js"]:
                 data = qusa_bytes
+                node["integrity"] = make_integrity(data)
+            elif path_parts == ["dist", "qusa_spotify_bridge.ps1"] and sp_bridge_bytes is not None:
+                data = sp_bridge_bytes
                 node["integrity"] = make_integrity(data)
             elif path_parts == ["dist", "utils.js"]:
                 data = patched_utils_bytes
