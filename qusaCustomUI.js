@@ -142,6 +142,7 @@ const DEFAULT_CONFIG = {
   baseColor: '#121212',
   separateSidebar: false,
   sidebarColor: '#181818',
+  detachedSidebar: true,
   panelContrast: 1.0,
   wallpaperUrl: '',
   wallpaperLocalName: '',
@@ -158,6 +159,9 @@ const DEFAULT_CONFIG = {
   antyEnabled: true,
   antyRoam: true,
   antySize: 58,
+  weatherEffect: 'none',
+  weatherIntensity: 1.0,
+  weatherSpeed: 1.0,
 };
 
 let activeLocalBlobUrl = '';
@@ -415,6 +419,19 @@ function injectStyles(cfg) {
       background-image: none !important;
       box-shadow: none !important;
     }
+    ${cfg.detachedSidebar !== false ? `
+    [data-qusa-role="header"] {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+    }
+    [data-qusa-sidebar-root="1"] {
+      margin: 2px 4px 8px 8px !important;
+      height: calc(100% - 10px) !important;
+      box-sizing: border-box !important;
+      border-radius: 12px !important;
+      border: 1px solid rgba(255, 255, 255, 0.10) !important;
+      overflow: hidden !important;
+    }
+    ` : ''}
     #qusa-bg-layer {
       position: fixed;
       inset: 0;
@@ -455,6 +472,19 @@ function injectStyles(cfg) {
       background-image: none !important;
       box-shadow: none !important;
     }
+    ${cfg.detachedSidebar !== false ? `
+    [data-qusa-role="header"] {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+    }
+    [data-qusa-sidebar-root="1"] {
+      margin: 2px 4px 8px 8px !important;
+      height: calc(100% - 10px) !important;
+      box-sizing: border-box !important;
+      border-radius: 12px !important;
+      border: 1px solid rgba(255, 255, 255, 0.10) !important;
+      overflow: hidden !important;
+    }
+    ` : ''}
     ` : '')}
 
     /* Compact Native-Style Draggable Button */
@@ -691,6 +721,42 @@ function injectStyles(cfg) {
       margin-top: 14px;
       padding-top: 10px;
       border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    /* Weather Physics Overlay Canvas */
+    #qusa-weather-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 99985;
+      pointer-events: none !important;
+      display: ${cfg.weatherEffect && cfg.weatherEffect !== 'none' ? 'block' : 'none'};
+    }
+    .qusa-seg-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+    .qusa-seg-btn {
+      padding: 6px 8px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      color: #cbd5e1;
+      font-size: 12px;
+      cursor: pointer;
+      text-align: center;
+      transition: background-color 0.12s ease, border-color 0.12s ease;
+    }
+    .qusa-seg-btn:hover {
+      background: rgba(255, 255, 255, 0.09);
+    }
+    .qusa-seg-btn.active {
+      background: rgba(255, 255, 255, 0.14);
+      border-color: rgba(255, 255, 255, 0.45);
+      color: #ffffff;
+      font-weight: 600;
     }
 
     /* Anty Mascot */
@@ -985,6 +1051,9 @@ function applySurfaceColors(cfg) {
       );
       role = isPopup ? 'popup' : isSidebarItem ? 'sidebar-item' : isSidebar ? 'sidebar' : isHeader ? 'header' : isCard ? 'card' : 'canvas';
       el.setAttribute('data-qusa-role', role);
+      if (role === 'sidebar' && rect.height > window.innerHeight * 0.5 && !(el.parentElement && el.parentElement.closest('[data-qusa-sidebar-root="1"]'))) {
+        el.setAttribute('data-qusa-sidebar-root', '1');
+      }
     }
 
     if (!shouldApply) {
@@ -1284,6 +1353,11 @@ function createStyleUI(cfg) {
           <input type="checkbox" id="qusa-sep-sidebar" />
         </div>
 
+        <div class="qusa-row">
+          <span>Отделить сайдбар от верхней полосы</span>
+          <input type="checkbox" id="qusa-detached-sidebar" />
+        </div>
+
         <div class="qusa-field" id="qusa-sidebar-field" style="display:none;margin-top:6px;">
           <div class="qusa-color-row">
             <input type="color" id="qusa-sidebar-picker" />
@@ -1350,6 +1424,25 @@ function createStyleUI(cfg) {
           </div>
         </div>
 
+        <details class="qusa-details" id="qusa-weather-details">
+          <summary>Погодные эффекты (дождь / снег)</summary>
+          <div class="qusa-wp-box">
+            <div class="qusa-seg-row" id="qusa-weather-seg">
+              <button type="button" class="qusa-seg-btn" data-weather="none">Выкл</button>
+              <button type="button" class="qusa-seg-btn" data-weather="rain">🌧 Дождь</button>
+              <button type="button" class="qusa-seg-btn" data-weather="snow">❄ Снег</button>
+            </div>
+            <div class="qusa-field" style="margin-bottom:0;">
+              <label><span>Интенсивность</span><span id="qusa-weather-int-val"></span></label>
+              <input type="range" id="qusa-weather-int-range" min="0.4" max="2.0" step="0.1" />
+            </div>
+            <div class="qusa-field" style="margin-bottom:0;">
+              <label><span>Скорость падения</span><span id="qusa-weather-spd-val"></span></label>
+              <input type="range" id="qusa-weather-spd-range" min="0.3" max="2.5" step="0.1" />
+            </div>
+          </div>
+        </details>
+
         <details class="qusa-details" id="qusa-anty-details">
           <summary>Маскот Anty (сидит на промпте и гуляет)</summary>
           <div class="qusa-wp-box">
@@ -1397,6 +1490,7 @@ function createStyleUI(cfg) {
     const basePicker = document.getElementById('qusa-base-picker');
     const baseHex = document.getElementById('qusa-base-hex');
     const sepSidebarEl = document.getElementById('qusa-sep-sidebar');
+    const detachedSidebarEl = document.getElementById('qusa-detached-sidebar');
     const sidebarField = document.getElementById('qusa-sidebar-field');
     const sidebarPicker = document.getElementById('qusa-sidebar-picker');
     const sidebarHex = document.getElementById('qusa-sidebar-hex');
@@ -1423,6 +1517,11 @@ function createStyleUI(cfg) {
     const antyRoamToggle = document.getElementById('qusa-anty-roam-toggle');
     const antySizeRange = document.getElementById('qusa-anty-size-range');
     const antySizeVal = document.getElementById('qusa-anty-size-val');
+    const weatherSeg = document.getElementById('qusa-weather-seg');
+    const weatherIntRange = document.getElementById('qusa-weather-int-range');
+    const weatherIntVal = document.getElementById('qusa-weather-int-val');
+    const weatherSpdRange = document.getElementById('qusa-weather-spd-range');
+    const weatherSpdVal = document.getElementById('qusa-weather-spd-val');
     const resetBtn = document.getElementById('qusa-reset-btn');
     const resetModelsBtn = document.getElementById('qusa-reset-models-btn');
     const customFrom = document.getElementById('qusa-custom-from');
@@ -1521,6 +1620,7 @@ function createStyleUI(cfg) {
       basePicker.value = cfg.baseColor;
       baseHex.value = cfg.baseColor;
       sepSidebarEl.checked = Boolean(cfg.separateSidebar);
+      detachedSidebarEl.checked = cfg.detachedSidebar !== false;
       sidebarField.style.display = cfg.separateSidebar ? 'block' : 'none';
       sidebarPicker.value = cfg.sidebarColor;
       sidebarHex.value = cfg.sidebarColor;
@@ -1541,6 +1641,16 @@ function createStyleUI(cfg) {
       antyRoamToggle.checked = cfg.antyRoam !== false;
       antySizeRange.value = String(cfg.antySize || 58);
       antySizeVal.textContent = `${cfg.antySize || 58}px`;
+      const curWeather = cfg.weatherEffect || 'none';
+      weatherSeg.querySelectorAll('.qusa-seg-btn').forEach((b) => {
+        b.classList.toggle('active', b.getAttribute('data-weather') === curWeather);
+      });
+      const wInt = Number(cfg.weatherIntensity || 1.0);
+      weatherIntRange.value = String(wInt);
+      weatherIntVal.textContent = `${Math.round(wInt * 100)}%`;
+      const wSpd = Number(cfg.weatherSpeed || 1.0);
+      weatherSpdRange.value = String(wSpd);
+      weatherSpdVal.textContent = `${Math.round(wSpd * 100)}%`;
       renderPresets();
       renderModelsList();
       updateWpStatusText();
@@ -1579,6 +1689,11 @@ function createStyleUI(cfg) {
     sepSidebarEl.addEventListener('change', () => {
       cfg.separateSidebar = sepSidebarEl.checked;
       sidebarField.style.display = cfg.separateSidebar ? 'block' : 'none';
+      applyAll(true);
+    });
+
+    detachedSidebarEl.addEventListener('change', () => {
+      cfg.detachedSidebar = detachedSidebarEl.checked;
       applyAll(true);
     });
 
@@ -1748,6 +1863,31 @@ function createStyleUI(cfg) {
       antySizeVal.textContent = `${cfg.antySize}px`;
       applyAll(false);
       if (window.__qusaUpdateAnty) window.__qusaUpdateAnty(cfg);
+    });
+
+    weatherSeg.querySelectorAll('.qusa-seg-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        cfg.weatherEffect = btn.getAttribute('data-weather') || 'none';
+        weatherSeg.querySelectorAll('.qusa-seg-btn').forEach((b) => {
+          b.classList.toggle('active', b === btn);
+        });
+        applyAll(true);
+        if (window.__qusaUpdateWeather) window.__qusaUpdateWeather(cfg);
+      });
+    });
+
+    weatherIntRange.addEventListener('input', () => {
+      cfg.weatherIntensity = parseFloat(weatherIntRange.value);
+      weatherIntVal.textContent = `${Math.round(cfg.weatherIntensity * 100)}%`;
+      saveConfig(cfg, false);
+      if (window.__qusaUpdateWeather) window.__qusaUpdateWeather(cfg);
+    });
+
+    weatherSpdRange.addEventListener('input', () => {
+      cfg.weatherSpeed = parseFloat(weatherSpdRange.value);
+      weatherSpdVal.textContent = `${Math.round(cfg.weatherSpeed * 100)}%`;
+      saveConfig(cfg, false);
+      if (window.__qusaUpdateWeather) window.__qusaUpdateWeather(cfg);
     });
 
     customAddBtn.addEventListener('click', () => {
@@ -2215,6 +2355,516 @@ function initAntyMascot(cfg) {
   }, 33);
 }
 
+// --- Weather Physics Effect (Realistic Rain & Crystalline Snow with UI collisions) ---
+
+function buildSnowflakeSprites() {
+  const sprites = [];
+  const size = 48;
+  const cx = size / 2;
+  const cy = size / 2;
+
+  for (let variant = 0; variant < 3; variant++) {
+    const c = document.createElement('canvas');
+    c.width = size;
+    c.height = size;
+    const g = c.getContext('2d');
+    if (!g) continue;
+
+    g.translate(cx, cy);
+    g.strokeStyle = 'rgba(240, 249, 255, 0.96)';
+    g.fillStyle = 'rgba(240, 249, 255, 0.96)';
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    g.shadowColor = 'rgba(186, 230, 253, 0.65)';
+    g.shadowBlur = 4;
+
+    const R = 18;
+    for (let arm = 0; arm < 6; arm++) {
+      g.save();
+      g.rotate((arm * Math.PI) / 3);
+
+      // Main crystal stem
+      g.lineWidth = variant === 1 ? 2.1 : 1.7;
+      g.beginPath();
+      g.moveTo(0, 0);
+      g.lineTo(0, -R);
+      g.stroke();
+
+      if (variant === 0) {
+        // Classic dendrite snowflake (two V-branches per arm)
+        g.lineWidth = 1.45;
+        for (const [y, len] of [[-7.5, 5.2], [-13, 4.4]]) {
+          g.beginPath();
+          g.moveTo(0, y);
+          g.lineTo(-len, y - len * 0.72);
+          g.moveTo(0, y);
+          g.lineTo(len, y - len * 0.72);
+          g.stroke();
+        }
+      } else if (variant === 1) {
+        // Ornate starry crystal with hexagonal inner plate & forked tips
+        g.lineWidth = 1.4;
+        g.beginPath();
+        g.moveTo(0, -11);
+        g.lineTo(-4.8, -14.8);
+        g.moveTo(0, -11);
+        g.lineTo(4.8, -14.8);
+        g.moveTo(0, -6.2);
+        g.lineTo(-3.6, -8.5);
+        g.moveTo(0, -6.2);
+        g.lineTo(3.6, -8.5);
+        g.stroke();
+        g.beginPath();
+        g.arc(0, -R, 1.6, 0, Math.PI * 2);
+        g.fill();
+      } else {
+        // Delicate fern-like crystal with three fine barbs
+        g.lineWidth = 1.25;
+        for (const [y, len] of [[-5.5, 3.6], [-10.5, 5.4], [-14.8, 3.2]]) {
+          g.beginPath();
+          g.moveTo(0, y);
+          g.lineTo(-len, y - len * 0.65);
+          g.moveTo(0, y);
+          g.lineTo(len, y - len * 0.65);
+          g.stroke();
+        }
+      }
+      g.restore();
+    }
+
+    // Center crystal core
+    g.beginPath();
+    g.arc(0, 0, variant === 1 ? 3.0 : 2.1, 0, Math.PI * 2);
+    g.fill();
+
+    sprites.push(c);
+  }
+  return sprites;
+}
+
+function initWeatherEffect(cfg) {
+  if (document.getElementById('qusa-weather-canvas')) return;
+
+  const canvas = document.createElement('canvas');
+  canvas.id = 'qusa-weather-canvas';
+  document.body.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const snowSprites = buildSnowflakeSprites();
+
+  let width = window.innerWidth;
+  let height = window.innerHeight;
+  const resize = () => {
+    width = window.innerWidth;
+    height = window.innerHeight;
+    canvas.width = width;
+    canvas.height = height;
+  };
+  resize();
+  window.addEventListener('resize', resize);
+
+  let mode = cfg.weatherEffect || 'none';
+  let intensity = Number(cfg.weatherIntensity || 1.0);
+  let speedMul = Number(cfg.weatherSpeed || 1.0);
+  let particles = [];
+  let resting = [];
+  let sliding = [];
+  let splashes = [];
+  let rings = [];
+  let colliders = [];
+  let lastColliderScan = 0;
+  let rafId = null;
+
+  const scanColliders = () => {
+    const out = [];
+    // 1. Prompt composer box
+    const editors = document.querySelectorAll('[contenteditable="true"], textarea');
+    for (const ed of editors) {
+      if (ed.closest('#qusa-theme-modal')) continue;
+      const er = ed.getBoundingClientRect();
+      if (er.width < 150 || er.height < 16) continue;
+      let cur = ed;
+      let best = null;
+      for (let i = 0; i < 8 && cur && cur !== document.body; i++) {
+        const r = cur.getBoundingClientRect();
+        if (r.width >= 260 && r.width <= width * 0.92 && r.height >= 44 && r.height <= 340) {
+          const cs = getComputedStyle(cur);
+          const br = parseFloat(cs.borderRadius) || 0;
+          if (cur.tagName === 'FORM' || br >= 10 || (cs.borderTopWidth && parseFloat(cs.borderTopWidth) >= 1)) {
+            best = r;
+          }
+        }
+        cur = cur.parentElement;
+      }
+      if (best) out.push({ left: best.left, right: best.right, top: best.top, bottom: best.bottom });
+      break;
+    }
+    // 2. Sidebar panel
+    const sb = document.querySelector('[data-qusa-sidebar-root="1"]') || document.querySelector('[data-qusa-role="sidebar"]');
+    if (sb) {
+      const sr = sb.getBoundingClientRect();
+      if (sr.width >= 120 && sr.height >= 200) {
+        out.push({ left: sr.left, right: sr.right, top: sr.top, bottom: sr.bottom });
+      }
+    }
+    colliders = out;
+  };
+
+  const spawnParticle = (randomY = false) => {
+    const depth = 0.48 + Math.random() * 0.72; // parallax depth
+    if (mode === 'rain') {
+      return {
+        x: Math.random() * (width + 240) - 40,
+        y: randomY ? Math.random() * height : -30 - Math.random() * 110,
+        depth,
+        vxBase: -(1.5 + Math.random() * 1.1) * depth,
+        vyBase: (11.5 + Math.random() * 6.5) * depth,
+        len: (12 + Math.random() * 13) * depth,
+        thick: 0.75 + depth * 0.75,
+        alpha: 0.16 + depth * 0.34,
+      };
+    }
+    return {
+      x: Math.random() * (width + 80) - 40,
+      y: randomY ? Math.random() * height : -24 - Math.random() * 70,
+      depth,
+      size: (8 + Math.random() * 11) * depth,
+      vyBase: (0.75 + Math.random() * 1.15) * depth,
+      phase: Math.random() * Math.PI * 2,
+      swayAmp: (0.35 + Math.random() * 0.65) * depth,
+      rot: Math.random() * Math.PI * 2,
+      rotSpeed: (Math.random() - 0.5) * 0.032,
+      variant: Math.floor(Math.random() * Math.max(1, snowSprites.length)),
+      alpha: 0.35 + depth * 0.52,
+    };
+  };
+
+  const syncParticleCount = () => {
+    if (mode === 'none') {
+      particles = [];
+      resting = [];
+      sliding = [];
+      splashes = [];
+      rings = [];
+      return;
+    }
+    const baseCount = mode === 'rain' ? 76 : 56;
+    const target = Math.max(18, Math.round(baseCount * clamp(intensity, 0.4, 2.0)));
+    while (particles.length < target) particles.push(spawnParticle(true));
+    if (particles.length > target) particles.length = target;
+  };
+
+  const step = (ts) => {
+    if (mode === 'none') {
+      rafId = null;
+      ctx.clearRect(0, 0, width, height);
+      return;
+    }
+    rafId = requestAnimationFrame(step);
+    if (document.hidden) return;
+
+    if (ts - lastColliderScan > 400) {
+      lastColliderScan = ts;
+      scanColliders();
+    }
+
+    ctx.clearRect(0, 0, width, height);
+    const now = Date.now();
+    const spd = clamp(speedMul, 0.3, 2.5);
+    // Natural wind gusts
+    const wind = Math.sin(ts * 0.00045) * 0.75 + Math.sin(ts * 0.00125) * 0.35;
+
+    // 1. Update & draw falling particles + check UI collisions
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      const prevX = p.x;
+      const prevY = p.y;
+      let curVx = 0;
+      let curVy = 0;
+
+      if (mode === 'rain') {
+        curVx = (p.vxBase + wind * 0.9 * p.depth) * spd;
+        curVy = p.vyBase * spd;
+        p.x += curVx;
+        p.y += curVy;
+      } else {
+        p.phase += 0.022 * Math.sqrt(spd);
+        curVx = (Math.sin(p.phase) * p.swayAmp + wind * 0.55 * p.depth) * spd;
+        curVy = p.vyBase * spd;
+        p.x += curVx;
+        p.y += curVy;
+        p.rot += p.rotSpeed * Math.sqrt(spd);
+      }
+
+      // Only mid/foreground drops collide with UI surfaces for realistic depth
+      let hit = false;
+      if (p.depth >= 0.62) {
+        for (const box of colliders) {
+          // Top edge hit -> rest on top edge (+ crown splash & ripple for rain)
+          if (prevY <= box.top + 3 && p.y >= box.top && p.x >= box.left + 8 && p.x <= box.right - 8) {
+            hit = true;
+            if (resting.length < 78) {
+              resting.push({
+                x: p.x,
+                y: box.top,
+                r: mode === 'rain' ? (1.9 + Math.random() * 1.6) : (p.size * 0.42),
+                rot: p.rot || 0,
+                variant: p.variant || 0,
+                born: now,
+                life: mode === 'rain' ? (2600 + Math.random() * 3200) : (5000 + Math.random() * 5200),
+                kind: mode,
+              });
+            }
+            if (mode === 'rain') {
+              if (splashes.length < 52) {
+                const count = 2 + Math.floor(Math.random() * 2);
+                for (let s = 0; s < count; s++) {
+                  splashes.push({
+                    x: p.x,
+                    y: box.top,
+                    vx: (Math.random() - 0.5) * 3.2 * Math.sqrt(spd),
+                    vy: -(1.5 + Math.random() * 2.1) * Math.sqrt(spd),
+                    r: 0.8 + Math.random() * 0.7,
+                    alpha: 0.72,
+                  });
+                }
+              }
+              if (rings.length < 22) {
+                rings.push({ x: p.x, y: box.top, rx: 1.5, maxRx: 7 + Math.random() * 5, alpha: 0.52 });
+              }
+            }
+            break;
+          }
+          // Side edge hit (left or right border of composer/sidebar) -> stick-slip slide down the side!
+          if (p.y > box.top + 6 && p.y < box.bottom - 8) {
+            const hitRight = prevX >= box.right - 3 && p.x <= box.right + 3 && curVx < 0;
+            const hitLeft = prevX <= box.left + 3 && p.x >= box.left - 3 && curVx > 0;
+            if (hitRight || hitLeft) {
+              hit = true;
+              if (sliding.length < 38) {
+                sliding.push({
+                  x: hitRight ? box.right : box.left,
+                  y: p.y,
+                  vy: mode === 'rain' ? (0.35 + Math.random() * 0.5) : (0.2 + Math.random() * 0.3),
+                  r: mode === 'rain' ? (2.1 + Math.random() * 1.2) : (p.size * 0.44),
+                  rot: p.rot || 0,
+                  variant: p.variant || 0,
+                  bottomY: box.bottom,
+                  detached: false,
+                  trailY: p.y,
+                  stickTimer: mode === 'rain' ? Math.random() * 18 : 0,
+                  kind: mode,
+                });
+              }
+              break;
+            }
+          }
+        }
+      }
+
+      if (hit || p.y > height + 30 || p.x < -80 || p.x > width + 260) {
+        particles[i] = spawnParticle(false);
+        continue;
+      }
+
+      // Draw falling particle
+      if (mode === 'rain') {
+        const tailX = p.x - (curVx / Math.max(1, curVy)) * p.len;
+        const tailY = p.y - p.len;
+        const grad = ctx.createLinearGradient(tailX, tailY, p.x, p.y);
+        grad.addColorStop(0, 'rgba(186, 230, 253, 0)');
+        grad.addColorStop(0.65, `rgba(186, 230, 253, ${p.alpha * 0.7})`);
+        grad.addColorStop(1, `rgba(224, 242, 254, ${Math.min(0.92, p.alpha * 1.45)})`);
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = p.thick;
+        ctx.beginPath();
+        ctx.moveTo(tailX, tailY);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+      } else {
+        const sp = snowSprites[p.variant];
+        if (sp) {
+          ctx.save();
+          ctx.globalAlpha = p.alpha;
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.drawImage(sp, -p.size / 2, -p.size / 2, p.size, p.size);
+          ctx.restore();
+        }
+      }
+    }
+
+    // 2. Draw expanding impact ripples on top edges (rain)
+    for (let i = rings.length - 1; i >= 0; i--) {
+      const rg = rings[i];
+      rg.rx += 0.45 * Math.sqrt(spd);
+      rg.alpha -= 0.032;
+      if (rg.alpha <= 0 || rg.rx >= rg.maxRx) {
+        rings.splice(i, 1);
+        continue;
+      }
+      ctx.strokeStyle = `rgba(224, 242, 254, ${rg.alpha})`;
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.ellipse(rg.x, rg.y, rg.rx, rg.rx * 0.28, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // 3. Draw resting drops / crystalline snowflakes on top edges
+    for (let i = resting.length - 1; i >= 0; i--) {
+      const d = resting[i];
+      const age = now - d.born;
+      if (age >= d.life) {
+        resting.splice(i, 1);
+        continue;
+      }
+      const fade = age > d.life * 0.72 ? 1 - (age - d.life * 0.72) / (d.life * 0.28) : 1;
+      if (d.kind === 'rain') {
+        // Subtle contact shadow + glassy dome + specular highlight
+        ctx.fillStyle = `rgba(0, 0, 0, ${0.28 * fade})`;
+        ctx.beginPath();
+        ctx.ellipse(d.x, d.y + 0.6, d.r * 1.3, d.r * 0.35, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        const dg = ctx.createRadialGradient(d.x - d.r * 0.3, d.y - d.r * 0.6, 0.3, d.x, d.y - d.r * 0.2, d.r * 1.4);
+        dg.addColorStop(0, `rgba(255, 255, 255, ${0.88 * fade})`);
+        dg.addColorStop(0.45, `rgba(186, 230, 253, ${0.58 * fade})`);
+        dg.addColorStop(1, `rgba(125, 211, 252, ${0.18 * fade})`);
+        ctx.fillStyle = dg;
+        ctx.beginPath();
+        ctx.ellipse(d.x, d.y - d.r * 0.28, d.r * 1.32, d.r * 0.78, 0, Math.PI, 0, false);
+        ctx.fill();
+      } else {
+        const sp = snowSprites[d.variant];
+        if (sp) {
+          const sz = d.r * 2.1 * (0.75 + 0.25 * fade);
+          ctx.save();
+          ctx.globalAlpha = 0.85 * fade;
+          ctx.translate(d.x, d.y - sz * 0.22);
+          ctx.rotate(d.rot);
+          ctx.drawImage(sp, -sz / 2, -sz / 2, sz, sz);
+          ctx.restore();
+        }
+      }
+    }
+
+    // 4. Update & draw side-sliding drops/snowflakes (with stick-slip physics) that detach at bottom corner
+    for (let i = sliding.length - 1; i >= 0; i--) {
+      const s = sliding[i];
+      if (!s.detached) {
+        if (s.kind === 'rain') {
+          // Stick-slip surface tension: brief hesitation then micro-burst slide
+          if (s.stickTimer > 0) {
+            s.stickTimer -= 1;
+            s.y += 0.08 * spd;
+          } else {
+            s.vy = Math.min(2.6, s.vy + 0.028);
+            s.y += s.vy * spd;
+            if (Math.random() < 0.04) {
+              s.stickTimer = 6 + Math.random() * 14;
+              s.vy *= 0.45;
+            }
+          }
+          // Fading wet streak along panel side
+          const tg = ctx.createLinearGradient(s.x, Math.max(s.trailY, s.y - 34), s.x, s.y);
+          tg.addColorStop(0, 'rgba(186, 230, 253, 0)');
+          tg.addColorStop(1, 'rgba(186, 230, 253, 0.34)');
+          ctx.strokeStyle = tg;
+          ctx.lineWidth = 1.3;
+          ctx.beginPath();
+          ctx.moveTo(s.x, Math.max(s.trailY, s.y - 34));
+          ctx.lineTo(s.x, s.y);
+          ctx.stroke();
+        } else {
+          s.vy = Math.min(0.85, s.vy + 0.005);
+          s.y += s.vy * spd;
+          s.rot += 0.012 * spd;
+        }
+        if (s.y >= s.bottomY) {
+          s.detached = true;
+          s.vy = Math.max(s.vy, s.kind === 'rain' ? 1.4 : 0.6);
+        }
+      } else {
+        s.vy += (s.kind === 'rain' ? 0.36 : 0.07) * spd;
+        s.y += s.vy * spd;
+      }
+
+      if (s.y > height + 20) {
+        sliding.splice(i, 1);
+        continue;
+      }
+
+      if (s.kind === 'rain') {
+        const stretch = s.detached ? 1.65 : (1.25 + Math.min(0.45, s.vy * 0.18));
+        ctx.fillStyle = 'rgba(186, 230, 253, 0.78)';
+        ctx.beginPath();
+        ctx.ellipse(s.x, s.y, s.r * 0.8, s.r * stretch, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
+        ctx.beginPath();
+        ctx.arc(s.x - s.r * 0.22, s.y - s.r * 0.35, Math.max(0.6, s.r * 0.3), 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        const sp = snowSprites[s.variant];
+        if (sp) {
+          const sz = s.r * 2.2;
+          ctx.save();
+          ctx.globalAlpha = 0.86;
+          ctx.translate(s.x, s.y);
+          ctx.rotate(s.rot);
+          ctx.drawImage(sp, -sz / 2, -sz / 2, sz, sz);
+          ctx.restore();
+        }
+      }
+    }
+
+    // 5. Update & draw crown splash droplets
+    for (let i = splashes.length - 1; i >= 0; i--) {
+      const sp = splashes[i];
+      sp.x += sp.vx;
+      sp.y += sp.vy;
+      sp.vy += 0.22 * Math.sqrt(spd);
+      sp.alpha -= 0.042;
+      if (sp.alpha <= 0) {
+        splashes.splice(i, 1);
+        continue;
+      }
+      ctx.fillStyle = `rgba(224, 242, 254, ${sp.alpha})`;
+      ctx.beginPath();
+      ctx.arc(sp.x, sp.y, sp.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  };
+
+  window.__qusaUpdateWeather = (newCfg) => {
+    const nextMode = newCfg.weatherEffect || 'none';
+    const modeChanged = nextMode !== mode;
+    mode = nextMode;
+    intensity = Number(newCfg.weatherIntensity || 1.0);
+    speedMul = Number(newCfg.weatherSpeed || 1.0);
+    canvas.style.display = mode !== 'none' ? 'block' : 'none';
+    if (modeChanged) {
+      particles = [];
+      resting = [];
+      sliding = [];
+      splashes = [];
+      rings = [];
+    }
+    syncParticleCount();
+    if (mode !== 'none' && !rafId) {
+      scanColliders();
+      rafId = requestAnimationFrame(step);
+    }
+  };
+
+  if (mode !== 'none') {
+    scanColliders();
+    syncParticleCount();
+    rafId = requestAnimationFrame(step);
+  }
+}
+
 function initQusaCustomUI() {
   const boot = async () => {
     if (!document.head || !document.body) return;
@@ -2233,6 +2883,7 @@ function initQusaCustomUI() {
     updateWallpaperLayer(cfg);
     createStyleUI(cfg);
     initAntyMascot(cfg);
+    initWeatherEffect(cfg);
     if (window.__qusaSyncWpStatus) window.__qusaSyncWpStatus();
     applySurfaceColors(cfg);
     applyTextTransforms(document.body, cfg);

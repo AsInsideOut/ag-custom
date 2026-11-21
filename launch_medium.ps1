@@ -65,11 +65,18 @@ public class MediumLauncher {
 }
 '@
 
-try {
-    Add-Type -TypeDefinition $code -ErrorAction Stop
-    [MediumLauncher]::LaunchAsExplorer($ExePath, (Split-Path $ExePath -Parent))
-    Write-Host "[Qusa] Launched Antigravity at Medium Integrity (drag-and-drop enabled)."
-} catch {
-    Write-Host "[Qusa] Medium launch fallback: $_"
-    Start-Process $ExePath
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+if ($isAdmin) {
+    try {
+        Add-Type -TypeDefinition $code -ErrorAction Stop
+        [MediumLauncher]::LaunchAsExplorer($ExePath, (Split-Path $ExePath -Parent))
+        Write-Host "[Qusa] Launched Antigravity at Medium Integrity (drag-and-drop enabled)."
+        exit 0
+    } catch {
+        Write-Host "[Qusa] Medium launch fallback via explorer..."
+    }
 }
+
+Start-Process -FilePath 'explorer.exe' -ArgumentList "`"$ExePath`""
+Write-Host "[Qusa] Launched Antigravity."

@@ -44,8 +44,8 @@ if ($checkCode -eq 2) {
     Copy-Item $orig $bak -Force
     $srcForPatch = $orig
 } elseif ($checkCode -eq 0 -and (Test-Path $bak)) {
-    Write-Host '[Qusa] Updating custom UI on top of current version...'
-    $srcForPatch = $orig
+    Write-Host '[Qusa] Re-applying latest patch on clean backup app.asar.bak...'
+    $srcForPatch = $bak
 } else {
     $srcForPatch = $orig
 }

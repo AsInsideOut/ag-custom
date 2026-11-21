@@ -81,6 +81,11 @@ UTILS_HOOK = """    if (!global.__qusaIpcRegistered) {
     }
     hubContents.on('did-finish-load', () => {
         try {
+            if (process.platform === 'win32' && typeof win?.setTitleBarOverlay === 'function') {
+                win.setTitleBarOverlay({ color: '#00000000', symbolColor: '#e2e8f0', height: 30 });
+            }
+        } catch (_e) {}
+        try {
             const fsMod = require('fs');
             const pathMod = require('path');
             const customUiPath = pathMod.join(__dirname, 'qusaCustomUI.js');
@@ -183,9 +188,18 @@ def patch_asar(src_path: str, ui_js_path: str, out_path: str, force: bool = Fals
 
     utils_src = utils_raw.decode("utf-8")
     if UTILS_MARKER not in utils_src:
-        m = re.search(r"^[ \t]*(?:void[ \t]+)?win\.loadURL\(url\);", utils_src, flags=re.MULTILINE)
+        hook_patterns = [
+            r"^[ \t]*(?:void[ \t]+)?loadHubWindowUrl\(win,",
+            r"^[ \t]*(?:void[ \t]+)?win\.loadURL\(url\);",
+            r"^[ \t]*\(0,\s*previewViewers_1\.registerPreviewViewer\)\(hubContents\);",
+        ]
+        m = None
+        for pat in hook_patterns:
+            m = re.search(pat, utils_src, flags=re.MULTILINE)
+            if m:
+                break
         if not m:
-            print("ERROR: Could not find win.loadURL(url) hook point in dist/utils.js", file=sys.stderr)
+            print("ERROR: Could not find Hub window hook point in dist/utils.js", file=sys.stderr)
             return 1
         patched_utils_bytes = (
             utils_src[: m.start()] + UTILS_HOOK + utils_src[m.start() :]
