@@ -195,12 +195,16 @@ const DEFAULT_CONFIG = {
   fabLeft: null,
   fabTop: null,
   antyEnabled: true,
+  antyCharacter: 'anty',
   antyRoam: true,
   antySize: 58,
   weatherEffect: 'none',
   weatherIntensity: 1.0,
   weatherSpeed: 1.0,
   spotifyIsland: true,
+  spotifyAutoWidth: true,
+  lyricsFontMode: 'custom',
+  lyricsFontName: '',
 };
 
 let activeLocalBlobUrl = '';
@@ -299,6 +303,66 @@ async function clearLocalWallpaper() {
     activeLocalBlobUrl = '';
     activeLocalMime = '';
   }
+}
+
+let activeLyricsFontFace = null;
+
+async function loadAndApplyLyricsFont(cfg) {
+  const root = document.documentElement;
+  const setSystemVars = () => {
+    root.style.setProperty('--qusa-lyrics-font', 'system-ui, -apple-system, sans-serif');
+    root.style.setProperty('--qusa-lf-weight', '600');
+    root.style.setProperty('--qusa-lf-fs-weight', '700');
+    root.style.setProperty('--qusa-lf-spacing', '0em');
+    root.style.setProperty('--qusa-lf-fs-spacing', '-0.01em');
+    root.style.setProperty('--qusa-lf-mini-size', '12px');
+    root.style.setProperty('--qusa-lf-exp-size', '13px');
+    root.style.setProperty('--qusa-lf-fs-size', '28px');
+  };
+  const setCustomVars = () => {
+    root.style.setProperty('--qusa-lyrics-font', "'QusaLyricsFont', system-ui, -apple-system, sans-serif");
+    root.style.setProperty('--qusa-lf-weight', '400');
+    root.style.setProperty('--qusa-lf-fs-weight', '400');
+    root.style.setProperty('--qusa-lf-spacing', '0.07em');
+    root.style.setProperty('--qusa-lf-fs-spacing', '0.055em');
+    root.style.setProperty('--qusa-lf-mini-size', '14.5px');
+    root.style.setProperty('--qusa-lf-exp-size', '17px');
+    root.style.setProperty('--qusa-lf-fs-size', '36px');
+  };
+  if (cfg.lyricsFontMode === 'system') {
+    setSystemVars();
+    const st = document.getElementById('qusa-lyrics-font-status');
+    if (st) st.textContent = 'Активный шрифт: Системный';
+    return;
+  }
+  if (!window.qusaPersist || typeof window.qusaPersist.loadLyricsFont !== 'function') {
+    setSystemVars();
+    return;
+  }
+  try {
+    const res = await window.qusaPersist.loadLyricsFont();
+    if (res && res.bytes && res.bytes.length > 0) {
+      if (activeLyricsFontFace) {
+        try { document.fonts.delete(activeLyricsFontFace); } catch {}
+        activeLyricsFontFace = null;
+      }
+      const buf = res.bytes.buffer.slice(res.bytes.byteOffset, res.bytes.byteOffset + res.bytes.byteLength);
+      const face = new FontFace('QusaLyricsFont', buf);
+      await face.load();
+      document.fonts.add(face);
+      activeLyricsFontFace = face;
+      setCustomVars();
+      const label = res.builtin ? `${res.name || 'aahigherup.ttf'} (встроенный)` : (res.name || cfg.lyricsFontName || 'custom.ttf');
+      const st = document.getElementById('qusa-lyrics-font-status');
+      if (st) st.textContent = `Активный шрифт: ${label}`;
+      return;
+    }
+  } catch (err) {
+    console.error('[Qusa] Lyrics font load failed:', err);
+  }
+  setSystemVars();
+  const st = document.getElementById('qusa-lyrics-font-status');
+  if (st) st.textContent = 'Активный шрифт: Системный';
 }
 
 function hasActiveWallpaper(cfg) {
@@ -463,7 +527,7 @@ function injectStyles(cfg) {
     ? 'url(#qusa-liquid-glass) blur(14px) saturate(175%) brightness(1.03)'
     : 'blur(20px) saturate(155%)';
   const sidebarGlassFilter = isLiquid
-    ? 'url(#qusa-liquid-glass) blur(18px) saturate(125%) brightness(0.92)'
+    ? 'blur(20px) saturate(135%) brightness(0.96)'
     : 'blur(20px) saturate(155%)';
   const glassBorder = isLiquid ? 'rgba(255, 255, 255, 0.26)' : 'rgba(255, 255, 255, 0.14)';
   const sidebarGlassBorder = isLiquid ? 'rgba(255, 255, 255, 0.18)' : 'rgba(255, 255, 255, 0.14)';
@@ -511,6 +575,23 @@ function injectStyles(cfg) {
     `}
     [data-qusa-sidebar-root="1"] {
       margin: 2px 4px 8px 8px !important;
+      height: calc(100% - 10px) !important;
+      box-sizing: border-box !important;
+      border-radius: ${isLiquid ? '16px' : '12px'} !important;
+      border: 1px solid ${sidebarGlassBorder} !important;
+      backdrop-filter: ${sidebarGlassFilter} !important;
+      -webkit-backdrop-filter: ${sidebarGlassFilter} !important;
+      box-shadow: ${sidebarGlassShadow} !important;
+      ${sidebarLiquidSheen}
+      overflow: hidden !important;
+    }
+    iframe[src^="plugin://"], iframe[src^="http://localhost:"], iframe[src^="http://127.0.0.1:"] {
+      background: transparent !important;
+      background-color: transparent !important;
+      color-scheme: dark;
+    }
+    [data-qusa-sidecar-pane="1"] {
+      margin: 2px 8px 8px 4px !important;
       height: calc(100% - 10px) !important;
       box-sizing: border-box !important;
       border-radius: ${isLiquid ? '16px' : '12px'} !important;
@@ -590,6 +671,23 @@ function injectStyles(cfg) {
     `}
     [data-qusa-sidebar-root="1"] {
       margin: 2px 4px 8px 8px !important;
+      height: calc(100% - 10px) !important;
+      box-sizing: border-box !important;
+      border-radius: ${isLiquid ? '16px' : '12px'} !important;
+      border: 1px solid ${sidebarGlassBorder} !important;
+      backdrop-filter: ${sidebarGlassFilter} !important;
+      -webkit-backdrop-filter: ${sidebarGlassFilter} !important;
+      box-shadow: ${sidebarGlassShadow} !important;
+      ${sidebarLiquidSheen}
+      overflow: hidden !important;
+    }
+    iframe[src^="plugin://"], iframe[src^="http://localhost:"], iframe[src^="http://127.0.0.1:"] {
+      background: transparent !important;
+      background-color: transparent !important;
+      color-scheme: dark;
+    }
+    [data-qusa-sidecar-pane="1"] {
+      margin: 2px 8px 8px 4px !important;
       height: calc(100% - 10px) !important;
       box-sizing: border-box !important;
       border-radius: ${isLiquid ? '16px' : '12px'} !important;
@@ -871,10 +969,15 @@ function injectStyles(cfg) {
       position: fixed;
       top: 4px;
       left: 50%;
-      transform: translateX(-50%);
+      transform: translateX(-50%) translateY(-10px) scaleX(0.32) scaleY(0.55);
+      transform-origin: top center;
       z-index: 99995;
-      display: none;
+      display: flex;
       flex-direction: column;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      filter: blur(6px);
       background: rgba(14, 18, 26, ${isLiquid ? '0.32' : '0.50'});
       backdrop-filter: ${glassFilter};
       -webkit-backdrop-filter: ${glassFilter};
@@ -885,11 +988,16 @@ function injectStyles(cfg) {
       font-family: system-ui, -apple-system, sans-serif;
       box-shadow: ${glassShadow};
       ${liquidSheen}
-      transition: width 0.28s cubic-bezier(0.22, 1, 0.36, 1),
-                  border-color 0.25s ease,
-                  box-shadow 0.25s ease,
-                  padding 0.28s cubic-bezier(0.22, 1, 0.36, 1),
-                  border-radius 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+      will-change: transform, opacity, width;
+      transition: transform 0.46s cubic-bezier(0.4, 0, 0.2, 1),
+                  opacity 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+                  filter 0.34s ease,
+                  visibility 0s linear 0.46s,
+                  width 0.42s cubic-bezier(0.32, 0.72, 0, 1),
+                  padding 0.42s cubic-bezier(0.32, 0.72, 0, 1),
+                  border-radius 0.42s cubic-bezier(0.32, 0.72, 0, 1),
+                  border-color 0.32s ease,
+                  box-shadow 0.32s ease;
       width: 278px;
       max-width: 90vw;
       overflow: hidden;
@@ -897,16 +1005,29 @@ function injectStyles(cfg) {
       -webkit-app-region: no-drag;
     }
     #qusa-spotify-island.visible {
-      display: flex;
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      filter: blur(0px);
+      transform: translateX(-50%) translateY(0) scaleX(1) scaleY(1);
+      transition: transform 0.54s cubic-bezier(0.16, 1, 0.3, 1),
+                  opacity 0.36s ease,
+                  filter 0.36s ease,
+                  visibility 0s linear 0s,
+                  width 0.42s cubic-bezier(0.32, 0.72, 0, 1),
+                  padding 0.42s cubic-bezier(0.32, 0.72, 0, 1),
+                  border-radius 0.42s cubic-bezier(0.32, 0.72, 0, 1),
+                  border-color 0.32s ease,
+                  box-shadow 0.32s ease;
     }
     #qusa-spotify-island.playing {
       border-color: rgba(29, 185, 84, 0.38);
       box-shadow: 0 6px 24px rgba(0, 0, 0, 0.48), 0 0 14px rgba(29, 185, 84, 0.14);
     }
-    #qusa-spotify-island:hover, #qusa-spotify-island.expanded {
+    #qusa-spotify-island.visible:hover, #qusa-spotify-island.visible.expanded {
       width: 326px;
       padding: 8px 12px 10px;
-      border-radius: 16px;
+      border-radius: ${isLiquid ? '20px' : '16px'};
     }
     .qsp-compact {
       display: flex;
@@ -924,9 +1045,11 @@ function injectStyles(cfg) {
       justify-content: center;
       overflow: hidden;
       flex-shrink: 0;
-      transition: width 0.26s cubic-bezier(0.22, 1, 0.36, 1), height 0.26s cubic-bezier(0.22, 1, 0.36, 1), border-radius 0.26s ease;
+      transition: width 0.40s cubic-bezier(0.32, 0.72, 0, 1),
+                  height 0.40s cubic-bezier(0.32, 0.72, 0, 1),
+                  border-radius 0.40s cubic-bezier(0.32, 0.72, 0, 1);
     }
-    #qusa-spotify-island:hover .qsp-art, #qusa-spotify-island.expanded .qsp-art {
+    #qusa-spotify-island.visible:hover .qsp-art, #qusa-spotify-island.visible.expanded .qsp-art {
       width: 34px;
       height: 34px;
       border-radius: 8px;
@@ -967,9 +1090,10 @@ function injectStyles(cfg) {
       max-width: 82px;
       opacity: 1;
       overflow: hidden;
-      transition: max-width 0.24s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s ease;
+      transition: max-width 0.36s cubic-bezier(0.32, 0.72, 0, 1),
+                  opacity 0.24s ease;
     }
-    #qusa-spotify-island:hover .qsp-mini-btns, #qusa-spotify-island.expanded .qsp-mini-btns {
+    #qusa-spotify-island.visible:hover .qsp-mini-btns, #qusa-spotify-island.visible.expanded .qsp-mini-btns {
       max-width: 0;
       opacity: 0;
       pointer-events: none;
@@ -987,7 +1111,7 @@ function injectStyles(cfg) {
       cursor: pointer;
       font-size: 12px;
       padding: 0;
-      transition: background-color 0.12s ease, color 0.12s ease, transform 0.1s ease;
+      transition: background-color 0.14s ease, color 0.14s ease, transform 0.12s ease;
     }
     .qsp-btn:hover {
       background: rgba(255, 255, 255, 0.10);
@@ -1013,33 +1137,39 @@ function injectStyles(cfg) {
     .qsp-btn.liked {
       color: #ff6ba9;
     }
+    .qsp-expand-wrap {
+      display: grid;
+      grid-template-rows: 0fr;
+      margin-top: 0;
+      opacity: 0;
+      pointer-events: none;
+      transition: grid-template-rows 0.42s cubic-bezier(0.32, 0.72, 0, 1),
+                  margin-top 0.42s cubic-bezier(0.32, 0.72, 0, 1),
+                  opacity 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    #qusa-spotify-island.visible:hover .qsp-expand-wrap, #qusa-spotify-island.visible.expanded .qsp-expand-wrap {
+      grid-template-rows: 1fr;
+      margin-top: 8px;
+      opacity: 1;
+      pointer-events: auto;
+    }
     .qsp-expand {
       display: flex;
       flex-direction: column;
       gap: 8px;
-      max-height: 0;
-      opacity: 0;
-      margin-top: 0;
+      min-height: 0;
+      overflow: hidden;
       padding-top: 0;
       border-top: 1px solid transparent;
-      transform: translateY(-4px);
-      overflow: hidden;
-      pointer-events: none;
-      transition: max-height 0.28s cubic-bezier(0.22, 1, 0.36, 1),
-                  opacity 0.22s ease,
-                  margin-top 0.26s cubic-bezier(0.22, 1, 0.36, 1),
-                  padding-top 0.26s cubic-bezier(0.22, 1, 0.36, 1),
-                  transform 0.26s cubic-bezier(0.22, 1, 0.36, 1),
-                  border-color 0.22s ease;
+      transform: translateY(-6px) scale(0.97);
+      transition: padding-top 0.42s cubic-bezier(0.32, 0.72, 0, 1),
+                  transform 0.42s cubic-bezier(0.32, 0.72, 0, 1),
+                  border-color 0.30s ease;
     }
-    #qusa-spotify-island:hover .qsp-expand, #qusa-spotify-island.expanded .qsp-expand {
-      max-height: 112px;
-      opacity: 1;
-      margin-top: 8px;
+    #qusa-spotify-island.visible:hover .qsp-expand, #qusa-spotify-island.visible.expanded .qsp-expand {
       padding-top: 8px;
       border-top-color: rgba(255, 255, 255, 0.08);
-      transform: translateY(0);
-      pointer-events: auto;
+      transform: translateY(0) scale(1);
     }
     .qsp-controls {
       display: flex;
@@ -1049,28 +1179,197 @@ function injectStyles(cfg) {
     }
     .qsp-quick {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1fr;
       gap: 6px;
     }
     .qsp-chip {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 5px;
-      padding: 5px 8px;
+      gap: 4px;
+      padding: 5px 6px;
       border-radius: 8px;
       background: rgba(255, 255, 255, 0.06);
       border: 1px solid rgba(255, 255, 255, 0.09);
       color: #e2e8f0;
-      font-size: 11px;
+      font-size: 10.5px;
       font-weight: 500;
       cursor: pointer;
-      transition: background-color 0.12s ease, border-color 0.12s ease;
+      white-space: nowrap;
+      transition: background-color 0.14s ease, border-color 0.14s ease;
     }
     .qsp-chip:hover {
       background: rgba(29, 185, 84, 0.16);
       border-color: rgba(29, 185, 84, 0.42);
       color: #ffffff;
+    }
+    .qsp-chip.has-lyrics {
+      border-color: rgba(255, 255, 255, 0.22);
+      color: #f8fafc;
+    }
+    .qsp-live-bar {
+      display: none;
+      font-family: var(--qusa-lyrics-font, 'QusaLyricsFont', system-ui, -apple-system, sans-serif);
+      font-size: var(--qusa-lf-mini-size, 14.5px);
+      font-weight: var(--qusa-lf-weight, 400);
+      font-synthesis: none;
+      letter-spacing: var(--qusa-lf-spacing, 0.07em);
+      line-height: 1.25;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      padding: 10px 8px;
+      margin: -10px -8px;
+      color: rgba(226, 232, 240, 0.45);
+      cursor: pointer;
+    }
+    #qusa-spotify-island.auto-width.has-live-lyric:not(:hover):not(.expanded) {
+      width: var(--qsp-dyn-w, 278px);
+    }
+    #qusa-spotify-island.has-live-lyric:not(:hover):not(.expanded) .qsp-meta-text {
+      display: none;
+    }
+    #qusa-spotify-island.has-live-lyric:not(:hover):not(.expanded) .qsp-live-bar {
+      display: block;
+    }
+    .qsp-expand-lyric {
+      display: none;
+      font-family: var(--qusa-lyrics-font, 'QusaLyricsFont', system-ui, -apple-system, sans-serif);
+      text-align: center;
+      font-size: var(--qusa-lf-exp-size, 17px);
+      font-weight: var(--qusa-lf-weight, 400);
+      font-synthesis: none;
+      letter-spacing: var(--qusa-lf-spacing, 0.07em);
+      line-height: 1.4;
+      color: rgba(226, 232, 240, 0.46);
+      padding: 2px 4px;
+      cursor: pointer;
+    }
+    .qsp-expand-lyric.show {
+      display: block;
+    }
+    .qsp-w {
+      display: inline-block;
+      margin-right: 0.28em;
+      padding: 0;
+      color: inherit;
+      transform-origin: center bottom;
+      transition: color 0.16s ease,
+                  transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+                  padding 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+                  text-shadow 0.18s ease;
+    }
+    .qsp-w:first-child {
+      transform-origin: left bottom;
+    }
+    .qsp-w:last-child {
+      margin-right: 0;
+    }
+    .qsp-w.past {
+      color: rgba(255, 255, 255, 0.88);
+    }
+    .qsp-w.cur {
+      color: #ffffff;
+      padding: 0 0.24em;
+      transform: scale(1.07) translateY(-0.5px);
+      text-shadow: 0 0 8px rgba(255, 255, 255, 0.58);
+    }
+    .qsp-w.cur:first-child {
+      padding-left: 0;
+      padding-right: 0.34em;
+    }
+    .qsp-fs-line.active {
+      color: rgba(255, 255, 255, 0.46);
+      transform: scale(1.02);
+      text-shadow: none;
+    }
+    .qsp-fs-line.active .qsp-w.past {
+      color: rgba(255, 255, 255, 0.90);
+      text-shadow: 0 0 12px rgba(255, 255, 255, 0.22);
+    }
+    .qsp-fs-line.active .qsp-w.cur {
+      color: #ffffff;
+      padding: 0 0.28em;
+      transform: scale(1.09) translateY(-1.5px);
+      text-shadow: 0 0 26px rgba(255, 255, 255, 0.85);
+    }
+    .qsp-fs-line.active .qsp-w.cur:first-child {
+      padding-left: 0;
+      padding-right: 0.40em;
+    }
+    .qsp-progress-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 2px 2px 0;
+    }
+    .qsp-progress-track {
+      position: relative;
+      height: 14px;
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      touch-action: none;
+    }
+    .qsp-progress-track::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 4px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.18);
+      transition: height 0.14s ease, background-color 0.14s ease;
+    }
+    .qsp-progress-track:hover::before,
+    .qsp-progress-track.dragging::before {
+      height: 5px;
+      background: rgba(255, 255, 255, 0.26);
+    }
+    .qsp-progress-fill {
+      position: relative;
+      height: 4px;
+      width: 0%;
+      border-radius: 999px;
+      background: #ffffff;
+      pointer-events: none;
+      transition: width 0.10s linear, height 0.14s ease;
+    }
+    .qsp-progress-track:hover .qsp-progress-fill,
+    .qsp-progress-track.dragging .qsp-progress-fill {
+      height: 5px;
+      background: #1ed760;
+    }
+    .qsp-progress-track.dragging .qsp-progress-fill {
+      transition: none;
+    }
+    .qsp-progress-fill::after {
+      content: '';
+      position: absolute;
+      right: -5px;
+      top: 50%;
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
+      transform: translateY(-50%) scale(0.4);
+      opacity: 0;
+      transition: transform 0.14s ease, opacity 0.14s ease;
+    }
+    .qsp-progress-track:hover .qsp-progress-fill::after,
+    .qsp-progress-track.dragging .qsp-progress-fill::after {
+      transform: translateY(-50%) scale(1);
+      opacity: 1;
+    }
+    .qsp-times {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 10.5px;
+      color: rgba(226, 232, 240, 0.78);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.01em;
     }
     .qsp-eq {
       display: inline-flex;
@@ -1087,6 +1386,211 @@ function injectStyles(cfg) {
       height: 3px;
       display: block;
       transition: height 85ms ease-out;
+    }
+
+    /* Fullscreen Live Lyrics Overlay */
+    #qusa-lyrics-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transform: scale(1.03);
+      transition: opacity 0.36s cubic-bezier(0.22, 1, 0.36, 1),
+                  transform 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+                  visibility 0s linear 0.38s;
+      font-family: system-ui, -apple-system, sans-serif;
+      color: #f8fafc;
+      user-select: none;
+      -webkit-app-region: no-drag;
+      overflow: hidden;
+      background: #090b10;
+    }
+    #qusa-lyrics-overlay.open {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      transform: scale(1);
+      transition: opacity 0.36s cubic-bezier(0.22, 1, 0.36, 1),
+                  transform 0.40s cubic-bezier(0.16, 1, 0.3, 1),
+                  visibility 0s linear 0s;
+    }
+    #qsp-fs-bg {
+      position: absolute;
+      inset: -12%;
+      background-size: cover;
+      background-position: center;
+      filter: blur(84px) saturate(185%) brightness(0.42);
+      transform: scale(1.12);
+      transition: background-image 0.6s ease;
+      pointer-events: none;
+    }
+    #qsp-fs-vignette {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 30% 45%, rgba(15, 20, 30, 0.12) 0%, rgba(5, 7, 12, 0.72) 100%);
+      pointer-events: none;
+    }
+    #qsp-fs-close {
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 5;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      color: rgba(255, 255, 255, 0.85);
+      width: 44px;
+      height: 26px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      backdrop-filter: blur(12px);
+      transition: background-color 0.16s ease, transform 0.16s ease;
+    }
+    #qsp-fs-close:hover {
+      background: rgba(255, 255, 255, 0.18);
+      transform: translateX(-50%) translateY(1px);
+    }
+    .qsp-fs-body {
+      position: relative;
+      z-index: 2;
+      width: min(1060px, 92vw);
+      height: min(640px, 82vh);
+      display: grid;
+      grid-template-columns: 310px 1fr;
+      gap: 56px;
+      align-items: center;
+    }
+    @media (max-width: 780px) {
+      .qsp-fs-body {
+        grid-template-columns: 1fr;
+        gap: 24px;
+        height: 86vh;
+      }
+    }
+    .qsp-fs-left {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+    .qsp-fs-art {
+      width: 264px;
+      height: 264px;
+      border-radius: 18px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.06);
+      box-shadow: 0 26px 64px rgba(0, 0, 0, 0.58), 0 0 0 1px rgba(255, 255, 255, 0.10);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .qsp-fs-art img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .qsp-fs-meta {
+      width: 100%;
+      text-align: center;
+    }
+    .qsp-fs-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .qsp-fs-artist {
+      font-size: 13.5px;
+      color: rgba(226, 232, 240, 0.72);
+      margin-top: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .qsp-fs-left .qsp-progress-wrap {
+      width: 100%;
+    }
+    .qsp-fs-controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      margin-top: 2px;
+    }
+    .qsp-fs-controls .qsp-btn {
+      width: 36px;
+      height: 36px;
+      font-size: 16px;
+    }
+    .qsp-fs-controls .qsp-btn.primary {
+      width: 44px;
+      height: 44px;
+      font-size: 17px;
+      background: rgba(255, 255, 255, 0.94);
+      color: #090b10;
+    }
+    .qsp-fs-controls .qsp-btn.primary:hover {
+      background: #ffffff;
+      transform: scale(1.05);
+    }
+    .qsp-fs-right {
+      height: 100%;
+      overflow-y: auto;
+      padding: 28vh 26px;
+      scrollbar-width: none;
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 18%, #000 82%, transparent 100%);
+      mask-image: linear-gradient(to bottom, transparent 0%, #000 18%, #000 82%, transparent 100%);
+    }
+    .qsp-fs-right::-webkit-scrollbar {
+      display: none;
+    }
+    .qsp-fs-line {
+      font-family: var(--qusa-lyrics-font, 'QusaLyricsFont', system-ui, -apple-system, sans-serif);
+      font-size: var(--qusa-lf-fs-size, 36px);
+      font-weight: var(--qusa-lf-fs-weight, 400);
+      font-synthesis: none;
+      line-height: 1.38;
+      letter-spacing: var(--qusa-lf-fs-spacing, 0.055em);
+      padding: 10px 0;
+      color: rgba(255, 255, 255, 0.36);
+      transform-origin: left center;
+      transform: scale(0.97);
+      cursor: pointer;
+      transition: color 0.32s ease,
+                  transform 0.36s cubic-bezier(0.22, 1, 0.36, 1),
+                  text-shadow 0.32s ease,
+                  opacity 0.32s ease;
+    }
+    .qsp-fs-line:hover {
+      color: rgba(255, 255, 255, 0.72);
+    }
+    .qsp-fs-line.past {
+      color: rgba(255, 255, 255, 0.28);
+    }
+    .qsp-fs-line.plain {
+      color: rgba(241, 245, 249, 0.82);
+      transform: none;
+      cursor: default;
+      font-size: 22px;
+      padding: 7px 0;
+    }
+    .qsp-fs-empty {
+      font-size: 20px;
+      font-weight: 600;
+      color: rgba(226, 232, 240, 0.48);
+      padding-top: 40px;
     }
 
     /* Weather Physics Overlay Canvas */
@@ -1131,7 +1635,7 @@ function injectStyles(cfg) {
       z-index: 99990;
       width: ${cfg.antySize || 58}px;
       height: ${cfg.antySize || 58}px;
-      display: ${cfg.antyEnabled !== false ? 'block' : 'none'};
+      display: ${cfg.antyEnabled !== false && cfg.antyCharacter !== 'rei' ? 'block' : 'none'};
       user-select: none;
       cursor: grab;
       pointer-events: auto;
@@ -1340,7 +1844,7 @@ function applySurfaceColors(cfg) {
   const els = document.querySelectorAll('div, main, section, aside, nav, header, footer, pre, form');
   for (const el of els) {
     if (el.id && el.id.startsWith('qusa-')) continue;
-    if (el.closest('#qusa-theme-modal, #qusa-style-fab, #qusa-telemetry-bar, #qusa-bg-layer, #qusa-anty, #qusa-spotify-island')) continue;
+    if (el.closest('#qusa-theme-modal, #qusa-style-fab, #qusa-telemetry-bar, #qusa-bg-layer, #qusa-anty, #qusa-rei-pet, #qusa-spotify-island, #qusa-lyrics-overlay')) continue;
     if (el.matches(INTERACTIVE_SELECTOR)) continue;
 
     let origStr = el.getAttribute('data-qusa-orig-bg');
@@ -1363,8 +1867,8 @@ function applySurfaceColors(cfg) {
           continue;
         }
       }
-      const inSidebar = Boolean(el.closest('[data-qusa-role="sidebar"]'));
-      if (inSidebar && shouldApply && rect.width >= 24 && rect.height >= 16 && rect.height <= 48) {
+      const inSidebar = Boolean(el.closest('[data-qusa-role="sidebar"], [data-qusa-sidebar-root="1"]'));
+      if (inSidebar && shouldApply && rect.width >= 20 && rect.height >= 12 && rect.height <= 140) {
         const csSide = getComputedStyle(el);
         if (csSide.backgroundImage && csSide.backgroundImage.includes('gradient')) {
           el.style.setProperty('background-image', 'none', 'important');
@@ -1431,6 +1935,10 @@ function applySurfaceColors(cfg) {
       el.style.setProperty('background-color', 'transparent', 'important');
       continue;
     }
+    if (wpActive && role === 'sidebar' && el.getAttribute('data-qusa-sidebar-root') !== '1' && el.closest('[data-qusa-sidebar-root="1"]')) {
+      el.style.setProperty('background-color', 'transparent', 'important');
+      continue;
+    }
 
     const parts = origStr.split(',').map(Number);
     const origLum = (parts[0] + parts[1] + parts[2]) / 3;
@@ -1464,6 +1972,61 @@ function applySurfaceColors(cfg) {
       ? `rgba(${shifted[0]}, ${shifted[1]}, ${shifted[2]}, ${outAlpha})`
       : `rgb(${shifted[0]}, ${shifted[1]}, ${shifted[2]})`;
     el.style.setProperty('background-color', colorVal, 'important');
+  }
+
+  // Style sidecar plugin panes (e.g. Swarm in Antigravity 2.35+) as matching floating glass panels
+  const sidecarIframes = document.querySelectorAll('iframe[src^="plugin://"], iframe[src^="http://localhost:"], iframe[src^="http://127.0.0.1:"]');
+  const isLiquidSide = cfg.glassStyle === 'liquid';
+  const sideRgb = cfg.colorEnabled ? baseRgb : [18, 18, 18];
+  const sideAlpha = wpActive ? (isLiquidSide ? Math.max(0.36, pAlpha * 0.86) : pAlpha) : 0.96;
+  for (const ifr of sidecarIframes) {
+    const rI = ifr.getBoundingClientRect();
+    if (rI.width < 180 || rI.height < 180) continue;
+    ifr.style.setProperty('background', 'transparent', 'important');
+    ifr.style.setProperty('background-color', 'transparent', 'important');
+    const pane = ifr.parentElement;
+    if (pane && pane !== document.body) {
+      if (shouldApply) {
+        pane.setAttribute('data-qusa-sidecar-pane', '1');
+        pane.style.setProperty('background-color', `rgba(${sideRgb[0]}, ${sideRgb[1]}, ${sideRgb[2]}, ${sideAlpha})`, 'important');
+      } else {
+        pane.removeAttribute('data-qusa-sidecar-pane');
+        pane.style.removeProperty('background-color');
+      }
+    }
+  }
+
+  // Clean solid dark-gray backgrounds on project folder headers/buttons inside sidebar
+  const sidebarRoot = document.querySelector('[data-qusa-sidebar-root="1"]');
+  if (sidebarRoot) {
+    const sbButtons = sidebarRoot.querySelectorAll('button, [role="button"], div');
+    for (const btn of sbButtons) {
+      if (btn.id === 'qusa-style-fab' || btn.closest('#qusa-style-fab')) continue;
+      if (btn === sidebarRoot) continue;
+      if (!shouldApply || !wpActive) {
+        if (btn.getAttribute('data-qusa-sb-clean') === '1') {
+          btn.style.removeProperty('background-color');
+          btn.style.removeProperty('background-image');
+          btn.removeAttribute('data-qusa-sb-clean');
+        }
+        continue;
+      }
+      const csB = getComputedStyle(btn);
+      if (csB.backgroundImage && csB.backgroundImage.includes('gradient')) {
+        btn.style.setProperty('background-image', 'none', 'important');
+        btn.style.setProperty('background-color', 'transparent', 'important');
+        btn.setAttribute('data-qusa-sb-clean', '1');
+        continue;
+      }
+      const pB = parseAnyCssColor(csB.backgroundColor);
+      if (!pB) continue;
+      const [br, bg, bb, ba] = pB;
+      const bSpread = Math.max(br, bg, bb) - Math.min(br, bg, bb);
+      if (ba >= 0.72 && bSpread <= 18 && br <= 68 && bg <= 68 && bb <= 68) {
+        btn.style.setProperty('background-color', 'rgba(255, 255, 255, 0.04)', 'important');
+        btn.setAttribute('data-qusa-sb-clean', '1');
+      }
+    }
   }
 }
 
@@ -1631,7 +2194,7 @@ function applyAccountNameToString(raw, customName, parentEl) {
 
 function shouldSkipTextNode(el) {
   if (!el) return true;
-  if (el.closest && el.closest('pre, code, .prose, [contenteditable="true"], [data-lexical-editor], [data-testid*="drag"], [data-qusa-skip], #qusa-theme-modal, #qusa-style-fab, #qusa-telemetry-bar, #qusa-anty, #qusa-spotify-island')) {
+  if (el.closest && el.closest('pre, code, .prose, [contenteditable="true"], [data-lexical-editor], [data-testid*="drag"], [data-qusa-skip], #qusa-theme-modal, #qusa-style-fab, #qusa-telemetry-bar, #qusa-anty, #qusa-rei-pet, #qusa-spotify-island, #qusa-lyrics-overlay')) {
     return true;
   }
   return false;
@@ -1796,7 +2359,7 @@ function dockStyleButtonInSidebar() {
   const candidates = document.querySelectorAll('button, a, [role="button"]');
   let settingsBtn = null;
   for (const el of candidates) {
-    if (el.id === 'qusa-style-fab' || el.closest('#qusa-theme-modal, #qusa-spotify-island')) continue;
+    if (el.id === 'qusa-style-fab' || el.closest('#qusa-theme-modal, #qusa-spotify-island, #qusa-lyrics-overlay')) continue;
     const txt = (el.textContent || '').trim();
     if (txt !== 'Settings' && txt !== 'Настройки') continue;
     const r = el.getBoundingClientRect();
@@ -1966,6 +2529,22 @@ function createStyleUI(cfg) {
         </div>
 
         <div class="qusa-row">
+          <span>Растягивать островок под длину текста</span>
+          <input type="checkbox" id="qusa-spotify-autowidth-toggle" />
+        </div>
+
+        <div class="qusa-field" style="padding-top:6px;">
+          <label><span>Шрифт текста песен (.ttf / .otf / .woff2)</span></label>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="qusa-close-btn" id="qusa-lyrics-font-pick" type="button">Выбрать .ttf</button>
+            <button class="qusa-close-btn" id="qusa-lyrics-font-default" type="button">Встроенный</button>
+            <button class="qusa-close-btn" id="qusa-lyrics-font-system" type="button">Системный</button>
+            <input type="file" id="qusa-lyrics-font-file" accept=".ttf,.otf,.woff,.woff2" style="display:none;" />
+          </div>
+          <div id="qusa-lyrics-font-status" style="font-size:11px;color:#94a3b8;margin-top:4px;">Активный шрифт: aahigherup.ttf (встроенный)</div>
+        </div>
+
+        <div class="qusa-row">
           <span>Скрыть кнопку «Стиль»</span>
           <input type="checkbox" id="qusa-fab-hidden-toggle" />
         </div>
@@ -2006,18 +2585,25 @@ function createStyleUI(cfg) {
         </details>
 
         <details class="qusa-details" id="qusa-anty-details">
-          <summary>Маскот Anty (сидит на промпте и гуляет)</summary>
+          <summary>Питомец (Anty / Rei — сидит на промпте и гуляет)</summary>
           <div class="qusa-wp-box">
             <div class="qusa-row" style="border-top:none;padding-top:0;">
-              <span>Включить маскота Anty</span>
+              <span>Включить питомца</span>
               <input type="checkbox" id="qusa-anty-toggle" />
+            </div>
+            <div class="qusa-field" style="margin-top:4px;">
+              <label><span>Персонаж</span></label>
+              <div class="qusa-seg-row" style="grid-template-columns:1fr 1fr;">
+                <button class="qusa-seg-btn" data-pet-char="anty" type="button">👾 Anty</button>
+                <button class="qusa-seg-btn" data-pet-char="rei" type="button">❄️ Rei</button>
+              </div>
             </div>
             <div class="qusa-row">
               <span>Гулять по интерфейсу</span>
               <input type="checkbox" id="qusa-anty-roam-toggle" />
             </div>
             <div class="qusa-field" style="margin-bottom:0;">
-              <label><span>Размер Anty</span><span id="qusa-anty-size-val"></span></label>
+              <label><span>Размер питомца</span><span id="qusa-anty-size-val"></span></label>
               <input type="range" id="qusa-anty-size-range" min="36" max="96" step="2" />
             </div>
           </div>
@@ -2073,6 +2659,12 @@ function createStyleUI(cfg) {
     const ruToggle = document.getElementById('qusa-ru-toggle');
     const thoughtsRuToggle = document.getElementById('qusa-thoughts-ru-toggle');
     const spotifyToggle = document.getElementById('qusa-spotify-toggle');
+    const spotifyAutoWidthToggle = document.getElementById('qusa-spotify-autowidth-toggle');
+    const lyricsFontPick = document.getElementById('qusa-lyrics-font-pick');
+    const lyricsFontDefault = document.getElementById('qusa-lyrics-font-default');
+    const lyricsFontSystem = document.getElementById('qusa-lyrics-font-system');
+    const lyricsFontFile = document.getElementById('qusa-lyrics-font-file');
+    const lyricsFontStatus = document.getElementById('qusa-lyrics-font-status');
     const fabHiddenToggle = document.getElementById('qusa-fab-hidden-toggle');
     const hotkeyBtn = document.getElementById('qusa-hotkey-btn');
     const hotkeyResetBtn = document.getElementById('qusa-hotkey-reset-btn');
@@ -2205,6 +2797,7 @@ function createStyleUI(cfg) {
       ruToggle.checked = Boolean(cfg.ruEnabled);
       thoughtsRuToggle.checked = Boolean(cfg.translateThoughts);
       spotifyToggle.checked = cfg.spotifyIsland !== false;
+      spotifyAutoWidthToggle.checked = cfg.spotifyAutoWidth !== false;
       fabHiddenToggle.checked = Boolean(cfg.fabHidden);
       hotkeyBtn.textContent = formatHotkey(cfg.fabHotkey || 'Alt+KeyS');
       accountNameInput.value = cfg.customAccountName || '';
@@ -2212,6 +2805,10 @@ function createStyleUI(cfg) {
       antyRoamToggle.checked = cfg.antyRoam !== false;
       antySizeRange.value = String(cfg.antySize || 58);
       antySizeVal.textContent = `${cfg.antySize || 58}px`;
+      const activeChar = cfg.antyCharacter === 'rei' ? 'rei' : 'anty';
+      document.querySelectorAll('#qusa-anty-details [data-pet-char]').forEach((b) => {
+        b.classList.toggle('active', b.getAttribute('data-pet-char') === activeChar);
+      });
       const curWeather = cfg.weatherEffect || 'none';
       weatherSeg.querySelectorAll('.qusa-seg-btn').forEach((b) => {
         b.classList.toggle('active', b.getAttribute('data-weather') === curWeather);
@@ -2371,6 +2968,47 @@ function createStyleUI(cfg) {
       if (window.__qusaUpdateSpotify) window.__qusaUpdateSpotify(cfg);
     });
 
+    spotifyAutoWidthToggle.addEventListener('change', () => {
+      cfg.spotifyAutoWidth = spotifyAutoWidthToggle.checked;
+      saveConfig(cfg, true);
+      if (window.__qusaUpdateSpotify) window.__qusaUpdateSpotify(cfg);
+    });
+
+    lyricsFontPick.addEventListener('click', () => { lyricsFontFile.click(); });
+    lyricsFontFile.addEventListener('change', async () => {
+      const f = lyricsFontFile.files && lyricsFontFile.files[0];
+      if (!f) return;
+      try {
+        const buf = await f.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        if (window.qusaPersist && typeof window.qusaPersist.saveLyricsFont === 'function') {
+          await window.qusaPersist.saveLyricsFont({ bytes, name: f.name });
+        }
+        cfg.lyricsFontMode = 'custom';
+        cfg.lyricsFontName = f.name;
+        saveConfig(cfg, true);
+        await loadAndApplyLyricsFont(cfg);
+      } catch (err) {
+        console.error('[Qusa] Font save failed:', err);
+        if (lyricsFontStatus) lyricsFontStatus.textContent = '⚠️ Не удалось загрузить файл шрифта';
+      }
+      lyricsFontFile.value = '';
+    });
+    lyricsFontDefault.addEventListener('click', async () => {
+      if (window.qusaPersist && typeof window.qusaPersist.clearLyricsFont === 'function') {
+        await window.qusaPersist.clearLyricsFont();
+      }
+      cfg.lyricsFontMode = 'custom';
+      cfg.lyricsFontName = '';
+      saveConfig(cfg, true);
+      await loadAndApplyLyricsFont(cfg);
+    });
+    lyricsFontSystem.addEventListener('click', async () => {
+      cfg.lyricsFontMode = 'system';
+      saveConfig(cfg, true);
+      await loadAndApplyLyricsFont(cfg);
+    });
+
     fabHiddenToggle.addEventListener('change', () => {
       cfg.fabHidden = fabHiddenToggle.checked;
       applyAll(true);
@@ -2443,12 +3081,26 @@ function createStyleUI(cfg) {
       cfg.antyEnabled = antyToggle.checked;
       applyAll(true);
       if (window.__qusaUpdateAnty) window.__qusaUpdateAnty(cfg);
+      if (window.__qusaUpdateRei) window.__qusaUpdateRei(cfg);
+    });
+
+    document.querySelectorAll('#qusa-anty-details [data-pet-char]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        cfg.antyCharacter = btn.getAttribute('data-pet-char') === 'rei' ? 'rei' : 'anty';
+        document.querySelectorAll('#qusa-anty-details [data-pet-char]').forEach((b) => {
+          b.classList.toggle('active', b === btn);
+        });
+        applyAll(true);
+        if (window.__qusaUpdateAnty) window.__qusaUpdateAnty(cfg);
+        if (window.__qusaUpdateRei) window.__qusaUpdateRei(cfg);
+      });
     });
 
     antyRoamToggle.addEventListener('change', () => {
       cfg.antyRoam = antyRoamToggle.checked;
       saveConfig(cfg, true);
       if (window.__qusaUpdateAnty) window.__qusaUpdateAnty(cfg);
+      if (window.__qusaUpdateRei) window.__qusaUpdateRei(cfg);
     });
 
     antySizeRange.addEventListener('input', () => {
@@ -2456,6 +3108,7 @@ function createStyleUI(cfg) {
       antySizeVal.textContent = `${cfg.antySize}px`;
       applyAll(false);
       if (window.__qusaUpdateAnty) window.__qusaUpdateAnty(cfg);
+      if (window.__qusaUpdateRei) window.__qusaUpdateRei(cfg);
     });
 
     weatherSeg.querySelectorAll('.qusa-seg-btn').forEach((btn) => {
@@ -2838,7 +3491,7 @@ function initAntyMascot(cfg) {
     const sz = getSize();
     root.style.width = `${sz}px`;
     root.style.height = `${sz}px`;
-    root.style.display = cfg.antyEnabled !== false ? 'block' : 'none';
+    root.style.display = (cfg.antyEnabled !== false && cfg.antyCharacter !== 'rei') ? 'block' : 'none';
     if (!cfg.antyRoam && mode === 'roam') {
       mode = 'perch';
     }
@@ -2848,7 +3501,7 @@ function initAntyMascot(cfg) {
   // Smooth animation & behavior loop (~30fps)
   const SPEED = 2.4;
   setInterval(() => {
-    if (document.hidden || cfg.antyEnabled === false || isDragging) return;
+    if (document.hidden || cfg.antyEnabled === false || cfg.antyCharacter === 'rei' || isDragging) return;
     const now = Date.now();
     const working = isAgentWorking();
 
@@ -3480,6 +4133,43 @@ const QSP_ICON_REPEAT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="n
 const QSP_ICON_REPEAT_LIST = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/><circle cx="12" cy="22" r="1.4" fill="currentColor" stroke="none"/></svg>`;
 const QSP_ICON_REPEAT_ONE = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/><path d="M11 10h1v4"/></svg>`;
 
+const QSP_ICON_LYRICS = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>`;
+const QSP_ICON_HEART_SM = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>`;
+const QSP_ICON_DJ = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg>`;
+
+function parseLrcLyrics(lrcStr) {
+  if (!lrcStr || typeof lrcStr !== 'string') return [];
+  const out = [];
+  const lines = lrcStr.split(/\r?\n/);
+  const tagRe = /\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]/g;
+  for (const rawLine of lines) {
+    const times = [];
+    let m;
+    tagRe.lastIndex = 0;
+    while ((m = tagRe.exec(rawLine)) !== null) {
+      const min = parseInt(m[1], 10) || 0;
+      const sec = parseInt(m[2], 10) || 0;
+      const fracRaw = m[3] || '0';
+      const frac = fracRaw.length === 3 ? parseInt(fracRaw, 10) / 1000 : parseInt(fracRaw, 10) / 100;
+      times.push(min * 60 + sec + frac);
+    }
+    const text = rawLine.replace(tagRe, '').trim();
+    if (times.length > 0) {
+      const isBreak = !text || /^[♪♫🎵🎶•·.\-\s]+$/.test(text);
+      for (const t of times) out.push({ time: t, text: isBreak ? '' : text, instrumental: isBreak });
+    }
+  }
+  out.sort((a, b) => a.time - b.time);
+  return out;
+}
+
+function formatTrackTime(sec) {
+  const s = Math.max(0, Math.floor(Number(sec) || 0));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${r < 10 ? '0' : ''}${r}`;
+}
+
 function initSpotifyIsland(cfg) {
   if (document.getElementById('qusa-spotify-island')) return;
   if (!window.qusaPersist || typeof window.qusaPersist.spotifyState !== 'function') return;
@@ -3488,10 +4178,13 @@ function initSpotifyIsland(cfg) {
   el.id = 'qusa-spotify-island';
   el.innerHTML = `
     <div class="qsp-compact">
-      <div class="qsp-art" id="qsp-art">${SPOTIFY_LOGO_SVG}</div>
+      <div class="qsp-art" id="qsp-art" title="Открыть полноэкранный плеер с текстом">${SPOTIFY_LOGO_SVG}</div>
       <div class="qsp-meta">
-        <div class="qsp-title" id="qsp-title">Spotify</div>
-        <div class="qsp-artist" id="qsp-artist">Ожидание трека...</div>
+        <div class="qsp-meta-text">
+          <div class="qsp-title" id="qsp-title">Spotify</div>
+          <div class="qsp-artist" id="qsp-artist">Ожидание трека...</div>
+        </div>
+        <div class="qsp-live-bar" id="qsp-live-bar" title="Открыть текст песни"></div>
       </div>
       <div class="qsp-eq" id="qsp-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
       <div class="qsp-mini-btns">
@@ -3500,41 +4193,505 @@ function initSpotifyIsland(cfg) {
         <button class="qsp-btn" id="qsp-mini-next" type="button" title="Следующий">⏭</button>
       </div>
     </div>
-    <div class="qsp-expand">
-      <div class="qsp-controls">
-        <button class="qsp-btn" id="qsp-btn-repeat" type="button" title="Повтор (Выкл / Плейлист / Трек)">${QSP_ICON_REPEAT}</button>
-        <button class="qsp-btn" id="qsp-btn-prev" type="button" title="Предыдущий трек">⏮</button>
-        <button class="qsp-btn primary" id="qsp-btn-play" type="button" title="Пауза / Воспроизвести">▶</button>
-        <button class="qsp-btn" id="qsp-btn-next" type="button" title="Следующий трек">⏭</button>
-        <button class="qsp-btn" id="qsp-btn-like" type="button" title="Добавить текущий трек в Избранное">♡</button>
-      </div>
-      <div class="qsp-quick">
-        <button class="qsp-chip" id="qsp-open-liked" type="button" title="Открыть Избранное в Spotify">♥ Избранное</button>
-        <button class="qsp-chip" id="qsp-open-dj" type="button" title="Запустить Spotify DJ">🎧 DJ</button>
+    <div class="qsp-expand-wrap">
+      <div class="qsp-expand">
+        <div class="qsp-expand-lyric" id="qsp-expand-lyric" title="Открыть полноэкранный текст"></div>
+        <div class="qsp-progress-wrap" id="qsp-mini-prog-wrap" style="display:none;">
+          <div class="qsp-progress-track" id="qsp-mini-prog-track"><div class="qsp-progress-fill" id="qsp-mini-prog-fill"></div></div>
+          <div class="qsp-times"><span id="qsp-mini-cur">0:00</span><span id="qsp-mini-dur">0:00</span></div>
+        </div>
+        <div class="qsp-controls">
+          <button class="qsp-btn" id="qsp-btn-repeat" type="button" title="Повтор (Выкл / Плейлист / Трек)">${QSP_ICON_REPEAT}</button>
+          <button class="qsp-btn" id="qsp-btn-prev" type="button" title="Предыдущий трек">⏮</button>
+          <button class="qsp-btn primary" id="qsp-btn-play" type="button" title="Пауза / Воспроизвести">▶</button>
+          <button class="qsp-btn" id="qsp-btn-next" type="button" title="Следующий трек">⏭</button>
+          <button class="qsp-btn" id="qsp-btn-like" type="button" title="Добавить текущий трек в Избранное">♡</button>
+        </div>
+        <div class="qsp-quick">
+          <button class="qsp-chip" id="qsp-open-lyrics" type="button" title="Полноэкранный плеер и текст песни">${QSP_ICON_LYRICS}<span>Текст</span></button>
+          <button class="qsp-chip" id="qsp-open-liked" type="button" title="Открыть Избранное в Spotify">${QSP_ICON_HEART_SM}<span>Лайки</span></button>
+          <button class="qsp-chip" id="qsp-open-dj" type="button" title="Запустить Spotify DJ">${QSP_ICON_DJ}<span>DJ</span></button>
+        </div>
       </div>
     </div>
   `;
   document.body.appendChild(el);
 
+  const fsEl = document.createElement('div');
+  fsEl.id = 'qusa-lyrics-overlay';
+  fsEl.innerHTML = `
+    <div id="qsp-fs-bg"></div>
+    <div id="qsp-fs-vignette"></div>
+    <button id="qsp-fs-close" type="button" title="Свернуть (Esc)">⌄</button>
+    <div class="qsp-fs-body">
+      <div class="qsp-fs-left">
+        <div class="qsp-fs-art" id="qsp-fs-art">${SPOTIFY_LOGO_SVG}</div>
+        <div class="qsp-fs-meta">
+          <div class="qsp-fs-title" id="qsp-fs-title">Spotify</div>
+          <div class="qsp-fs-artist" id="qsp-fs-artist"></div>
+        </div>
+        <div class="qsp-progress-wrap" id="qsp-fs-prog-wrap">
+          <div class="qsp-progress-track" id="qsp-fs-prog-track"><div class="qsp-progress-fill" id="qsp-fs-prog-fill"></div></div>
+          <div class="qsp-times"><span id="qsp-fs-cur">0:00</span><span id="qsp-fs-dur">0:00</span></div>
+        </div>
+        <div class="qsp-fs-controls">
+          <button class="qsp-btn" id="qsp-fs-repeat" type="button" title="Повтор">${QSP_ICON_REPEAT}</button>
+          <button class="qsp-btn" id="qsp-fs-prev" type="button" title="Предыдущий трек">⏮</button>
+          <button class="qsp-btn primary" id="qsp-fs-play" type="button" title="Пауза / Воспроизвести">▶</button>
+          <button class="qsp-btn" id="qsp-fs-next" type="button" title="Следующий трек">⏭</button>
+          <button class="qsp-btn" id="qsp-fs-like" type="button" title="В Избранное">♡</button>
+        </div>
+      </div>
+      <div class="qsp-fs-right" id="qsp-fs-lyrics">
+        <div class="qsp-fs-empty">Поиск текста песни...</div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(fsEl);
+
   const artEl = document.getElementById('qsp-art');
   const titleEl = document.getElementById('qsp-title');
   const artistEl = document.getElementById('qsp-artist');
+  const liveBarEl = document.getElementById('qsp-live-bar');
+  const expandLyricEl = document.getElementById('qsp-expand-lyric');
+  const miniProgWrap = document.getElementById('qsp-mini-prog-wrap');
+  const miniProgTrack = document.getElementById('qsp-mini-prog-track');
+  const miniProgFill = document.getElementById('qsp-mini-prog-fill');
+  const miniCurEl = document.getElementById('qsp-mini-cur');
+  const miniDurEl = document.getElementById('qsp-mini-dur');
+  const btnOpenLyrics = document.getElementById('qsp-open-lyrics');
   const miniPlay = document.getElementById('qsp-mini-play');
   const btnPlay = document.getElementById('qsp-btn-play');
   const btnRepeat = document.getElementById('qsp-btn-repeat');
   const btnLike = document.getElementById('qsp-btn-like');
   const eqBars = Array.from(document.querySelectorAll('#qsp-eq i'));
 
+  const fsBgEl = document.getElementById('qsp-fs-bg');
+  const fsArtEl = document.getElementById('qsp-fs-art');
+  const fsTitleEl = document.getElementById('qsp-fs-title');
+  const fsArtistEl = document.getElementById('qsp-fs-artist');
+  const fsProgTrack = document.getElementById('qsp-fs-prog-track');
+  const fsProgFill = document.getElementById('qsp-fs-prog-fill');
+  const fsCurEl = document.getElementById('qsp-fs-cur');
+  const fsDurEl = document.getElementById('qsp-fs-dur');
+  const fsPlayBtn = document.getElementById('qsp-fs-play');
+  const fsRepeatBtn = document.getElementById('qsp-fs-repeat');
+  const fsLikeBtn = document.getElementById('qsp-fs-like');
+  const fsLyricsBox = document.getElementById('qsp-fs-lyrics');
+
   let lastCover = '';
+  let webCover = '';
+  let gsmtcCover = '';
+  let isScrubbing = false;
+  let scrubPos = 0;
   let currentTrackKey = '';
+  let currentTrackMetaKey = '';
   const likedTracks = new Set(Array.isArray(cfg.spotifyLiked) ? cfg.spotifyLiked : []);
   let pollBusy = false;
+
+  const applyCoverArt = () => {
+    const covMini = gsmtcCover || webCover || '';
+    const covFull = webCover || gsmtcCover || '';
+    if (covMini !== lastCover) {
+      lastCover = covMini;
+      artEl.innerHTML = covMini ? `<img src="${covMini}" alt="" />` : SPOTIFY_LOGO_SVG;
+    }
+    fsArtEl.innerHTML = covFull ? `<img src="${covFull}" alt="" />` : SPOTIFY_LOGO_SVG;
+    fsBgEl.style.backgroundImage = covFull ? `url("${covFull}")` : 'none';
+  };
+
+  // Live timeline & lyrics state
+  let basePosition = 0;
+  let basePositionAt = Date.now();
+  let trackDuration = 0;
+  let timelineSyncedOnce = false;
+  let lyricsFetchedWithDur = false;
+  let syncedLines = [];
+  let plainLines = [];
+  let activeLineIdx = -1;
+  let fsLineNodes = new Map();
+  let userManualScrollUntil = 0;
+  let lyricsReqId = 0;
+
+  fsLyricsBox.addEventListener('wheel', () => { userManualScrollUntil = Date.now() + 3500; }, { passive: true });
+  fsLyricsBox.addEventListener('touchstart', () => { userManualScrollUntil = Date.now() + 3500; }, { passive: true });
+
+  const openFullscreen = () => {
+    if (!isCurrentlyVisible) return;
+    fsEl.classList.add('open');
+    const curNode = activeLineIdx >= 0 ? fsLineNodes.get(activeLineIdx) : null;
+    if (curNode) {
+      setTimeout(() => {
+        const top = curNode.offsetTop - fsLyricsBox.clientHeight * 0.42 + curNode.clientHeight / 2;
+        fsLyricsBox.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+      }, 60);
+    }
+  };
+  const closeFullscreen = () => {
+    fsEl.classList.remove('open');
+  };
+
+  document.getElementById('qsp-fs-close').addEventListener('click', closeFullscreen);
+  fsEl.addEventListener('click', (e) => {
+    if (e.target === fsEl || e.target === fsBgEl || e.target.id === 'qsp-fs-vignette') closeFullscreen();
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && fsEl.classList.contains('open')) closeFullscreen();
+  });
+  artEl.addEventListener('click', (e) => { e.stopPropagation(); openFullscreen(); });
+  liveBarEl.addEventListener('click', (e) => { e.stopPropagation(); openFullscreen(); });
+  expandLyricEl.addEventListener('click', (e) => { e.stopPropagation(); openFullscreen(); });
+  btnOpenLyrics.addEventListener('click', () => { openFullscreen(); });
+
+  let liveBarWords = [];
+  let expandWords = [];
+  let fsWordMap = new Map();
+  let lastCurWordIdx = -1;
+  const lyricMeasureCanvas = document.createElement('canvas');
+  const lyricMeasureCtx = lyricMeasureCanvas.getContext('2d');
+
+  const syncAutoWidthClass = () => {
+    el.classList.toggle('auto-width', cfg.spotifyAutoWidth !== false);
+  };
+  syncAutoWidthClass();
+
+  const updateDynamicWidth = (text) => {
+    if (cfg.spotifyAutoWidth === false || !text) {
+      el.style.removeProperty('--qsp-dyn-w');
+      return;
+    }
+    let textW = 0;
+    if (liveBarWords && liveBarWords.length > 0) {
+      const firstRect = liveBarWords[0].el.getBoundingClientRect();
+      const lastRect = liveBarWords[liveBarWords.length - 1].el.getBoundingClientRect();
+      if (lastRect.right > firstRect.left) {
+        textW = lastRect.right - firstRect.left;
+      } else {
+        for (let i = 0; i < liveBarWords.length; i++) {
+          textW += liveBarWords[i].el.getBoundingClientRect().width + 6;
+        }
+      }
+      // Headroom for active word scale + padding (0.48em) + glow padding (16px)
+      textW += 44;
+    }
+    if (textW < 20 && lyricMeasureCtx) {
+      const isSys = cfg.lyricsFontMode === 'system';
+      const activeFamily = isSys
+        ? 'system-ui, -apple-system, sans-serif'
+        : "'QusaLyricsFont', system-ui, -apple-system, sans-serif";
+      lyricMeasureCtx.font = `${isSys ? '600 12px' : '400 14.5px'} ${activeFamily}`;
+      textW = lyricMeasureCtx.measureText(text).width * (isSys ? 1.18 : 1.38) + 44;
+    }
+    // Fixed chrome: art (22) + eq (18) + mini btns (76) + gaps/paddings (52) = 168px
+    const maxW = Math.min(680, Math.round(window.innerWidth * 0.72));
+    const targetW = Math.max(278, Math.min(maxW, Math.ceil(textW + 172)));
+    el.style.setProperty('--qsp-dyn-w', `${targetW}px`);
+  };
+
+  const buildWordSpans = (container, text) => {
+    container.innerHTML = '';
+    const tokens = String(text || '').trim().split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return [];
+    const weights = tokens.map((w) => {
+      const base = Math.max(1.6, w.replace(/[.,!?;:—\-«»"']/g, '').length);
+      const pause = /[,;:—]$/.test(w) ? 1.8 : /[.!?]$/.test(w) ? 2.4 : 0;
+      return base + pause;
+    });
+    const totalW = weights.reduce((a, b) => a + b, 0) || 1;
+    let acc = 0;
+    const out = [];
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < tokens.length; i++) {
+      const span = document.createElement('span');
+      span.className = 'qsp-w';
+      span.textContent = tokens[i];
+      frag.appendChild(span);
+      const start = acc / totalW;
+      acc += weights[i];
+      const end = acc / totalW;
+      out.push({ el: span, start, end });
+    }
+    container.appendChild(frag);
+    return out;
+  };
+
+  const applyWordHighlight = (words, ratio) => {
+    if (!words || words.length === 0) return -1;
+    let curIdx = words.length - 1;
+    for (let i = 0; i < words.length; i++) {
+      if (ratio < words[i].end) {
+        curIdx = i;
+        break;
+      }
+    }
+    for (let i = 0; i < words.length; i++) {
+      const wEl = words[i].el;
+      wEl.classList.toggle('past', i < curIdx);
+      wEl.classList.toggle('cur', i === curIdx);
+    }
+    return curIdx;
+  };
+
+  const clearWordHighlight = (words) => {
+    if (!words) return;
+    for (let i = 0; i < words.length; i++) {
+      words[i].el.classList.remove('past', 'cur');
+    }
+  };
+
+  const renderFsLyricsDom = (statusMsg) => {
+    fsLineNodes = new Map();
+    fsWordMap = new Map();
+    activeLineIdx = -1;
+    lastCurWordIdx = -1;
+    const hasRealSynced = syncedLines.some((item) => !item.instrumental && item.text);
+    if (hasRealSynced) {
+      fsLyricsBox.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      syncedLines.forEach((item, idx) => {
+        if (item.instrumental || !item.text) return;
+        const div = document.createElement('div');
+        div.className = 'qsp-fs-line';
+        const wItems = buildWordSpans(div, item.text);
+        div.addEventListener('click', () => {
+          basePosition = item.time;
+          basePositionAt = Date.now();
+          userManualScrollUntil = 0;
+          void runAction(`seek:${item.time.toFixed(2)}`);
+        });
+        fsLineNodes.set(idx, div);
+        fsWordMap.set(idx, wItems);
+        frag.appendChild(div);
+      });
+      fsLyricsBox.appendChild(frag);
+      btnOpenLyrics.classList.add('has-lyrics');
+    } else if (plainLines.length > 0) {
+      fsLyricsBox.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      plainLines.forEach((txt) => {
+        const div = document.createElement('div');
+        div.className = 'qsp-fs-line plain';
+        div.textContent = txt;
+        frag.appendChild(div);
+      });
+      fsLyricsBox.appendChild(frag);
+      btnOpenLyrics.classList.add('has-lyrics');
+    } else {
+      fsLyricsBox.innerHTML = `<div class="qsp-fs-empty">${statusMsg || 'Текст песни не найден'}</div>`;
+      btnOpenLyrics.classList.remove('has-lyrics');
+    }
+  };
+
+  let coverReqId = 0;
+  const fetchCoverForTrack = async (artist, title) => {
+    const reqId = ++coverReqId;
+    if (!window.qusaPersist || typeof window.qusaPersist.spotifyCover !== 'function') return;
+    try {
+      const res = await window.qusaPersist.spotifyCover({ artist, title });
+      if (reqId !== coverReqId) return;
+      if (res && res.cover) {
+        webCover = res.cover;
+        applyCoverArt();
+      }
+      if (res && typeof res.duration === 'number' && res.duration > 1 && trackDuration <= 1) {
+        trackDuration = res.duration;
+        timelineSyncedOnce = true;
+      }
+    } catch {}
+  };
+
+  const fetchLyricsForTrack = async (artist, title, duration) => {
+    const reqId = ++lyricsReqId;
+    syncedLines = [];
+    plainLines = [];
+    el.classList.remove('has-live-lyric');
+    expandLyricEl.classList.remove('show');
+    expandLyricEl.textContent = '';
+    liveBarEl.textContent = '';
+    renderFsLyricsDom('Поиск текста песни...');
+    if (!window.qusaPersist || typeof window.qusaPersist.spotifyLyrics !== 'function') {
+      renderFsLyricsDom('Текст недоступен');
+      return;
+    }
+    try {
+      const res = await window.qusaPersist.spotifyLyrics({ artist, title, duration });
+      if (reqId !== lyricsReqId) return;
+      if (res && res.cover) {
+        webCover = res.cover;
+        applyCoverArt();
+      }
+      if (res && typeof res.duration === 'number' && res.duration > 1 && trackDuration <= 1) {
+        trackDuration = res.duration;
+        timelineSyncedOnce = true;
+      }
+      if (res && res.synced) {
+        syncedLines = parseLrcLyrics(res.synced);
+      }
+      if (syncedLines.length === 0 && res && res.plain) {
+        plainLines = String(res.plain).split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+      }
+      renderFsLyricsDom('Для этого трека текст не найден');
+    } catch {
+      if (reqId !== lyricsReqId) return;
+      renderFsLyricsDom('Не удалось загрузить текст');
+    }
+  };
+
+  const getLivePos = () => {
+    let pos = basePosition;
+    if (isCurrentlyPlaying) {
+      pos += (Date.now() - basePositionAt) / 1000;
+    }
+    if (pos < 0) pos = 0;
+    if (trackDuration > 0 && pos > trackDuration) pos = trackDuration;
+    return pos;
+  };
+
+  const tickLiveLyrics = () => {
+    if (!isCurrentlyVisible) return;
+    const pos = isScrubbing ? scrubPos : getLivePos();
+    const dur = trackDuration;
+    const pct = dur > 0 ? Math.min(100, Math.max(0, (pos / dur) * 100)) : 0;
+
+    if (dur > 0) {
+      miniProgWrap.style.display = 'flex';
+      miniProgFill.style.width = `${pct.toFixed(2)}%`;
+      miniCurEl.textContent = `${formatTrackTime(pos)} / ${formatTrackTime(dur)}`;
+      miniDurEl.textContent = '';
+      fsProgFill.style.width = `${pct.toFixed(2)}%`;
+      fsCurEl.textContent = formatTrackTime(pos);
+      fsDurEl.textContent = formatTrackTime(dur);
+    } else {
+      miniProgWrap.style.display = 'none';
+      fsProgFill.style.width = '0%';
+      fsCurEl.textContent = '0:00';
+      fsDurEl.textContent = '0:00';
+    }
+
+    if (syncedLines.length === 0 || !timelineSyncedOnce) {
+      el.classList.remove('has-live-lyric');
+      expandLyricEl.classList.remove('show');
+      return;
+    }
+
+    // Strict sync with LRC timestamps (no artificial lookahead so text never appears early)
+    const t = pos;
+    let idx = -1;
+    for (let i = 0; i < syncedLines.length; i++) {
+      if (syncedLines[i].time <= t) idx = i;
+      else break;
+    }
+
+    const curLine = idx >= 0 ? syncedLines[idx] : null;
+    const nextTime = idx >= 0 && idx + 1 < syncedLines.length
+      ? syncedLines[idx + 1].time
+      : (curLine && dur > curLine.time ? dur : (curLine ? curLine.time + 5 : 0));
+    const gap = curLine ? Math.max(0.5, nextTime - curLine.time) : 0;
+    const elapsedInLine = curLine ? (t - curLine.time) : 0;
+    // Hide lyric during intro (idx < 0), explicit instrumental LRC markers, or long instrumental breaks (>11s gap after 7.5s)
+    const isSilentBreak = !curLine || curLine.instrumental || !curLine.text || (gap > 11.0 && elapsedInLine > 7.5);
+
+    if (!isSilentBreak) {
+      const displaySpan = Math.min(gap, 7.0);
+      const lineRatio = Math.min(0.999, Math.max(0, elapsedInLine / Math.max(0.4, displaySpan)));
+
+      el.classList.toggle('has-live-lyric', isCurrentlyPlaying);
+      if (idx !== activeLineIdx) {
+        if (activeLineIdx >= 0) clearWordHighlight(fsWordMap.get(activeLineIdx));
+        activeLineIdx = idx;
+        lastCurWordIdx = -1;
+        liveBarWords = buildWordSpans(liveBarEl, curLine.text);
+        expandWords = buildWordSpans(expandLyricEl, curLine.text);
+        expandLyricEl.classList.add('show');
+        updateDynamicWidth(curLine.text);
+
+        fsLineNodes.forEach((n, lineIdx) => {
+          n.classList.toggle('active', lineIdx === idx);
+          n.classList.toggle('past', lineIdx < idx);
+        });
+        const curNode = fsLineNodes.get(idx);
+        if (fsEl.classList.contains('open') && Date.now() > userManualScrollUntil && curNode) {
+          const top = curNode.offsetTop - fsLyricsBox.clientHeight * 0.42 + curNode.clientHeight / 2;
+          fsLyricsBox.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+        }
+      }
+
+      const wIdx = applyWordHighlight(liveBarWords, lineRatio);
+      if (wIdx !== lastCurWordIdx) {
+        lastCurWordIdx = wIdx;
+        applyWordHighlight(expandWords, lineRatio);
+        applyWordHighlight(fsWordMap.get(idx), lineRatio);
+      }
+    } else {
+      el.classList.remove('has-live-lyric');
+      el.style.removeProperty('--qsp-dyn-w');
+      expandLyricEl.classList.remove('show');
+      if (activeLineIdx !== -1) {
+        clearWordHighlight(fsWordMap.get(activeLineIdx));
+        activeLineIdx = -1;
+        lastCurWordIdx = -1;
+        fsLineNodes.forEach((n, lineIdx) => {
+          n.classList.remove('active');
+          n.classList.toggle('past', idx >= 0 && lineIdx <= idx);
+        });
+      }
+    }
+  };
+
+  const bindSeekScrubber = (trackEl, keepIslandOpen) => {
+    const calcSec = (clientX) => {
+      const rect = trackEl.getBoundingClientRect();
+      const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / Math.max(1, rect.width)));
+      return ratio * trackDuration;
+    };
+    const onMove = (e) => {
+      if (!isScrubbing || trackDuration <= 0) return;
+      scrubPos = calcSec(e.clientX);
+      tickLiveLyrics();
+    };
+    const onUp = (e) => {
+      if (!isScrubbing) return;
+      isScrubbing = false;
+      trackEl.classList.remove('dragging');
+      if (keepIslandOpen) el.classList.remove('expanded');
+      try { trackEl.releasePointerCapture(e.pointerId); } catch {}
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      if (trackDuration > 0) {
+        const targetSec = calcSec(e.clientX);
+        basePosition = targetSec;
+        basePositionAt = Date.now();
+        tickLiveLyrics();
+        void runAction(`seek:${targetSec.toFixed(2)}`);
+      }
+    };
+    trackEl.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || trackDuration <= 0) return;
+      e.stopPropagation();
+      e.preventDefault();
+      isScrubbing = true;
+      trackEl.classList.add('dragging');
+      if (keepIslandOpen) el.classList.add('expanded');
+      try { trackEl.setPointerCapture(e.pointerId); } catch {}
+      scrubPos = calcSec(e.clientX);
+      tickLiveLyrics();
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onUp);
+    });
+  };
+  bindSeekScrubber(miniProgTrack, true);
+  bindSeekScrubber(fsProgTrack, false);
 
   const syncLikeBtn = () => {
     const isLiked = Boolean(currentTrackKey && likedTracks.has(currentTrackKey));
     btnLike.classList.toggle('liked', isLiked);
     btnLike.textContent = isLiked ? '♥' : '♡';
     btnLike.title = isLiked ? 'Убрать трек из Избранного' : 'Добавить текущий трек в Избранное';
+    fsLikeBtn.classList.toggle('liked', isLiked);
+    fsLikeBtn.textContent = isLiked ? '♥' : '♡';
+    fsLikeBtn.title = btnLike.title;
   };
   let peakBusy = false;
   let actionBusy = false;
@@ -3554,7 +4711,6 @@ function initSpotifyIsland(cfg) {
     const l = Number(peaks[0] || 0);
     const m = Number(peaks[1] || l);
     const r = Number(peaks[2] || l);
-    // Boost perceptual curve (pow 0.65) so quiet & loud passages both look lively and accurate
     const toH = (v, jitter) => {
       const norm = Math.min(1, Math.pow(Math.max(0, v * 1.45), 0.68) * jitter);
       return Math.max(3, Math.min(14, Math.round(3 + norm * 11)));
@@ -3576,15 +4732,17 @@ function initSpotifyIsland(cfg) {
     if (cfg.spotifyIsland === false) {
       isCurrentlyVisible = false;
       isCurrentlyPlaying = false;
-      el.classList.remove('visible', 'playing');
+      el.classList.remove('visible', 'playing', 'expanded', 'has-live-lyric');
+      closeFullscreen();
       updateEqBars(null);
       return;
     }
-    if (!st) return; // bridge busy, keep current UI state untouched
+    if (!st) return;
     if (!st.running) {
       isCurrentlyVisible = false;
       isCurrentlyPlaying = false;
-      el.classList.remove('visible', 'playing');
+      el.classList.remove('visible', 'playing', 'expanded', 'has-live-lyric');
+      closeFullscreen();
       updateEqBars(null);
       return;
     }
@@ -3596,35 +4754,82 @@ function initSpotifyIsland(cfg) {
     const playGlyph = isCurrentlyPlaying ? '⏸' : '▶';
     miniPlay.textContent = playGlyph;
     btnPlay.textContent = playGlyph;
+    fsPlayBtn.textContent = playGlyph;
 
     if (st.hasSession && (st.title || st.artist)) {
-      titleEl.textContent = st.title || 'Без названия';
-      artistEl.textContent = st.artist || 'Spotify';
+      const tStr = st.title || 'Без названия';
+      const aStr = st.artist || 'Spotify';
+      titleEl.textContent = tStr;
+      artistEl.textContent = aStr;
+      fsTitleEl.textContent = tStr;
+      fsArtistEl.textContent = aStr;
+
       const nextKey = (st.title || st.artist || '').trim().toLowerCase();
       if (nextKey !== currentTrackKey) {
         currentTrackKey = nextKey;
         syncLikeBtn();
       }
+      const nextMetaKey = `${aStr}|${tStr}`.toLowerCase();
+      const hasValidTl = Boolean(st.timelineValid && typeof st.duration === 'number' && st.duration > 1);
+      if (nextMetaKey !== currentTrackMetaKey) {
+        currentTrackMetaKey = nextMetaKey;
+        webCover = '';
+        gsmtcCover = st.cover || '';
+        lastCover = '';
+        applyCoverArt();
+        timelineSyncedOnce = hasValidTl;
+        basePosition = hasValidTl ? Number(st.position || 0) : 0;
+        basePositionAt = Date.now();
+        trackDuration = hasValidTl ? Number(st.duration || 0) : 0;
+        lyricsFetchedWithDur = hasValidTl;
+        void fetchCoverForTrack(aStr, tStr);
+        void fetchLyricsForTrack(aStr, tStr, trackDuration);
+      } else if (hasValidTl) {
+        trackDuration = st.duration;
+        const reported = Number(st.position || 0);
+        const curLive = getLivePos();
+        if (!timelineSyncedOnce || !isCurrentlyPlaying || Math.abs(reported - curLive) > 0.35) {
+          timelineSyncedOnce = true;
+          basePosition = reported;
+          basePositionAt = Date.now();
+        }
+        if (!lyricsFetchedWithDur && trackDuration > 1) {
+          lyricsFetchedWithDur = true;
+          void fetchLyricsForTrack(aStr, tStr, trackDuration);
+        }
+      }
     } else {
       titleEl.textContent = 'Spotify открыт';
       artistEl.textContent = 'Выбери Избранное или DJ';
+      fsTitleEl.textContent = 'Spotify открыт';
+      fsArtistEl.textContent = '';
+      trackDuration = 0;
       if (currentTrackKey) {
         currentTrackKey = '';
+        currentTrackMetaKey = '';
+        syncedLines = [];
+        plainLines = [];
+        el.classList.remove('has-live-lyric');
         syncLikeBtn();
       }
     }
 
     const rep = st.repeat || 'None';
+    const repIcon = rep === 'Track' ? QSP_ICON_REPEAT_ONE : rep === 'List' ? QSP_ICON_REPEAT_LIST : QSP_ICON_REPEAT;
+    const repTitle = rep === 'Track' ? 'Повтор: 1 трек' : rep === 'List' ? 'Повтор: плейлист' : 'Повтор: выкл';
     btnRepeat.classList.toggle('active', rep !== 'None');
-    btnRepeat.innerHTML = rep === 'Track' ? QSP_ICON_REPEAT_ONE : rep === 'List' ? QSP_ICON_REPEAT_LIST : QSP_ICON_REPEAT;
-    btnRepeat.title = rep === 'Track' ? 'Повтор: 1 трек' : rep === 'List' ? 'Повтор: плейлист' : 'Повтор: выкл';
+    btnRepeat.innerHTML = repIcon;
+    btnRepeat.title = repTitle;
+    fsRepeatBtn.classList.toggle('active', rep !== 'None');
+    fsRepeatBtn.innerHTML = repIcon;
+    fsRepeatBtn.title = repTitle;
 
     if (st.peaks) updateEqBars(st.peaks);
 
     const cov = st.cover || '';
-    if (cov !== lastCover) {
-      lastCover = cov;
-      artEl.innerHTML = cov ? `<img src="${cov}" alt="" />` : SPOTIFY_LOGO_SVG;
+    if (cov !== gsmtcCover) {
+      gsmtcCover = cov;
+      applyCoverArt();
     }
   };
 
@@ -3654,7 +4859,7 @@ function initSpotifyIsland(cfg) {
     try {
       const st = await window.qusaPersist.spotifyAction(cmd);
       if (st) renderState(st);
-      if (cmd === 'next' || cmd === 'prev' || cmd === 'playpause') {
+      if (cmd === 'next' || cmd === 'prev' || cmd === 'playpause' || cmd.startsWith('seek:')) {
         setTimeout(() => { void poll(); }, 280);
         setTimeout(() => { void poll(); }, 700);
       }
@@ -3662,15 +4867,7 @@ function initSpotifyIsland(cfg) {
     actionBusy = false;
   };
 
-  document.getElementById('qsp-mini-prev').addEventListener('click', (e) => { e.stopPropagation(); void runAction('prev'); });
-  document.getElementById('qsp-mini-play').addEventListener('click', (e) => { e.stopPropagation(); void runAction('playpause'); });
-  document.getElementById('qsp-mini-next').addEventListener('click', (e) => { e.stopPropagation(); void runAction('next'); });
-  document.getElementById('qsp-btn-prev').addEventListener('click', () => { void runAction('prev'); });
-  document.getElementById('qsp-btn-play').addEventListener('click', () => { void runAction('playpause'); });
-  document.getElementById('qsp-btn-next').addEventListener('click', () => { void runAction('next'); });
-  document.getElementById('qsp-btn-repeat').addEventListener('click', () => { void runAction('repeat'); });
-
-  btnLike.addEventListener('click', async () => {
+  const toggleLike = async () => {
     if (!currentTrackKey) return;
     if (likedTracks.has(currentTrackKey)) {
       likedTracks.delete(currentTrackKey);
@@ -3685,7 +4882,22 @@ function initSpotifyIsland(cfg) {
     saveConfig(cfg, true);
     syncLikeBtn();
     await runAction('like');
-  });
+  };
+
+  document.getElementById('qsp-mini-prev').addEventListener('click', (e) => { e.stopPropagation(); void runAction('prev'); });
+  document.getElementById('qsp-mini-play').addEventListener('click', (e) => { e.stopPropagation(); void runAction('playpause'); });
+  document.getElementById('qsp-mini-next').addEventListener('click', (e) => { e.stopPropagation(); void runAction('next'); });
+  document.getElementById('qsp-btn-prev').addEventListener('click', () => { void runAction('prev'); });
+  document.getElementById('qsp-btn-play').addEventListener('click', () => { void runAction('playpause'); });
+  document.getElementById('qsp-btn-next').addEventListener('click', () => { void runAction('next'); });
+  document.getElementById('qsp-btn-repeat').addEventListener('click', () => { void runAction('repeat'); });
+  btnLike.addEventListener('click', () => { void toggleLike(); });
+
+  document.getElementById('qsp-fs-prev').addEventListener('click', () => { void runAction('prev'); });
+  fsPlayBtn.addEventListener('click', () => { void runAction('playpause'); });
+  document.getElementById('qsp-fs-next').addEventListener('click', () => { void runAction('next'); });
+  fsRepeatBtn.addEventListener('click', () => { void runAction('repeat'); });
+  fsLikeBtn.addEventListener('click', () => { void toggleLike(); });
 
   document.getElementById('qsp-open-liked').addEventListener('click', () => {
     void window.qusaPersist.spotifyOpen('spotify:collection:tracks');
@@ -3697,10 +4909,14 @@ function initSpotifyIsland(cfg) {
 
   window.__qusaUpdateSpotify = (newCfg) => {
     cfg = newCfg;
+    syncAutoWidthClass();
+    if (cfg.spotifyAutoWidth === false) el.style.removeProperty('--qsp-dyn-w');
+    else if (activeLineIdx >= 0 && syncedLines[activeLineIdx]) updateDynamicWidth(syncedLines[activeLineIdx].text);
     if (cfg.spotifyIsland === false) {
       isCurrentlyVisible = false;
       isCurrentlyPlaying = false;
-      el.classList.remove('visible', 'playing');
+      el.classList.remove('visible', 'playing', 'expanded', 'has-live-lyric');
+      closeFullscreen();
     } else {
       void poll();
     }
@@ -3709,6 +4925,261 @@ function initSpotifyIsland(cfg) {
   void poll();
   setInterval(() => { void poll(); }, 300);
   setInterval(() => { void pollPeak(); }, 95);
+  setInterval(() => { tickLiveLyrics(); }, 80);
+}
+
+function initReiPet(cfg) {
+  if (document.getElementById('qusa-rei-pet')) return;
+
+  const EMOTIONS = ['❤️', '💻', '✨', '❄️', '💙', '🎵', '⚡', '💤'];
+  const REI_WEBP = 'data:image/webp;base64,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';
+
+  const pet = document.createElement('div');
+  pet.id = 'qusa-rei-pet';
+  pet.title = 'Rei — потяни мышкой, кликни для эмоции или погладь курсором (2 сек)';
+  pet.style.cssText = 'position:fixed;left:0;top:0;z-index:99992;cursor:grab;user-select:none;touch-action:none;will-change:transform;filter:drop-shadow(0 3px 8px rgba(0,0,0,0.65));';
+
+  const getDims = () => {
+    const h = Math.max(36, Math.min(96, Number(cfg.antySize || 58)));
+    const w = Math.round(h * (102 / 160));
+    return { w, h };
+  };
+
+  const applySizeAndVis = () => {
+    const { w, h } = getDims();
+    pet.style.width = `${w}px`;
+    pet.style.height = `${h}px`;
+    const svg = pet.querySelector('svg');
+    if (svg) {
+      svg.setAttribute('width', String(w));
+      svg.setAttribute('height', String(h));
+    }
+    pet.style.display = (cfg.antyEnabled !== false && cfg.antyCharacter === 'rei') ? 'block' : 'none';
+  };
+
+  const initDims = getDims();
+  pet.innerHTML = `
+    <div id="qusa-rei-emo" style="position:absolute;left:50%;top:-18px;transform:translate(-50%,0);opacity:0;transition:opacity .2s,transform .2s;font-size:13px;pointer-events:none;">❄️</div>
+    <div id="qusa-rei-wrap" style="transform-origin:center center;">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 102 160" width="${initDims.w}" height="${initDims.h}" style="overflow:visible;display:block;">
+        <defs>
+          <image id="qusaReiStandImg" x="0" y="0" width="102" height="156" href="${REI_WEBP}"/>
+          <clipPath id="qusaReiStandUp"><rect x="0" y="0" width="102" height="131"/></clipPath>
+          <clipPath id="qusaReiStandL"><rect x="26" y="127" width="27" height="30"/></clipPath>
+          <clipPath id="qusaReiStandR"><rect x="53" y="127" width="25" height="30"/></clipPath>
+          <radialGradient id="qusaReiStandSh" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="rgba(8,14,28,0.58)"/><stop offset="100%" stop-color="rgba(8,14,28,0)"/>
+          </radialGradient>
+        </defs>
+        <ellipse id="qusa-rei-sh" cx="51" cy="156" rx="22" ry="4" fill="url(#qusaReiStandSh)" style="transform-origin:51px 156px;"/>
+        <g id="qusa-rei-body" style="transform-origin:51px 132px;">
+          <g id="qusa-rei-leg-l" clip-path="url(#qusaReiStandL)" style="transform-origin:42px 129px;"><use href="#qusaReiStandImg"/></g>
+          <g id="qusa-rei-leg-r" clip-path="url(#qusaReiStandR)" style="transform-origin:62px 129px;"><use href="#qusaReiStandImg"/></g>
+          <g clip-path="url(#qusaReiStandUp)"><use href="#qusaReiStandImg"/></g>
+        </g>
+      </svg>
+    </div>`;
+  document.body.appendChild(pet);
+  applySizeAndVis();
+
+  const emo = pet.querySelector('#qusa-rei-emo');
+  const wrap = pet.querySelector('#qusa-rei-wrap');
+  const legL = pet.querySelector('#qusa-rei-leg-l');
+  const legR = pet.querySelector('#qusa-rei-leg-r');
+  const body = pet.querySelector('#qusa-rei-body');
+  const sh = pet.querySelector('#qusa-rei-sh');
+
+  let emoT = null;
+  const say = (e) => {
+    emo.textContent = e;
+    emo.style.opacity = '1';
+    emo.style.transform = 'translate(-50%,-6px)';
+    clearTimeout(emoT);
+    emoT = setTimeout(() => {
+      emo.style.opacity = '0';
+      emo.style.transform = 'translate(-50%,0)';
+    }, 1500);
+  };
+
+  const spawnHeart = () => {
+    const h = document.createElement('span');
+    h.className = 'qusa-anty-heart';
+    h.textContent = Math.random() < 0.5 ? '💙' : '♥';
+    h.style.left = `${30 + Math.random() * 40}%`;
+    h.style.top = `${4 + Math.random() * 14}%`;
+    pet.appendChild(h);
+    setTimeout(() => h.remove(), 950);
+  };
+
+  const getSurfaceBounds = () => {
+    const comp = document.querySelector('[data-qusa-composer="1"]');
+    const { w, h } = getDims();
+    if (comp) {
+      const r = comp.getBoundingClientRect();
+      if (r.width >= 160 && r.height >= 40 && r.top > h + 20 && r.bottom <= window.innerHeight + 10) {
+        return {
+          minX: r.left + 12,
+          maxX: Math.max(r.left + 20, r.right - w - 12),
+          groundY: r.top - h + 4,
+        };
+      }
+    }
+    return {
+      minX: 280,
+      maxX: Math.max(300, window.innerWidth - w - 24),
+      groundY: window.innerHeight - h - 10,
+    };
+  };
+
+  const initB = getSurfaceBounds();
+  const st = {
+    x: initB.minX + Math.min(120, (initB.maxX - initB.minX) * 0.25),
+    yOffset: 0,
+    vx: 22,
+    vy: 0,
+    dir: 1,
+    phase: 0,
+    squash: 0,
+    drag: false,
+    fall: false,
+    pauseUntil: 0,
+    nextEmo: performance.now() + 5000,
+    hoverStart: 0,
+    lastPetHeart: 0,
+  };
+
+  pet.addEventListener('pointerenter', () => { st.hoverStart = Date.now(); });
+  pet.addEventListener('pointerleave', () => { st.hoverStart = 0; });
+  pet.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    st.drag = true;
+    st.fall = false;
+    st.vy = 0;
+    st.sx = e.clientX;
+    st.sy = e.clientY;
+    st.ox = st.x;
+    st.oy = st.yOffset;
+    st.moved = false;
+    pet.style.cursor = 'grabbing';
+    say('😮');
+    try { pet.setPointerCapture(e.pointerId); } catch {}
+  });
+  pet.addEventListener('pointermove', (e) => {
+    if (st.drag) {
+      const dx = e.clientX - st.sx;
+      const dy = e.clientY - st.sy;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) st.moved = true;
+      const b = getSurfaceBounds();
+      st.x = Math.max(8, Math.min(window.innerWidth - getDims().w - 8, st.ox + dx));
+      st.yOffset = Math.min(window.innerHeight - b.groundY - getDims().h, st.oy + dy);
+      if (dx !== 0) st.dir = dx > 0 ? 1 : -1;
+      return;
+    }
+    if (st.hoverStart && Date.now() - st.hoverStart >= 1800) {
+      const nowMs = Date.now();
+      if (nowMs - st.lastPetHeart > 420) {
+        st.lastPetHeart = nowMs;
+        spawnHeart();
+        say('💙');
+      }
+    }
+  });
+  const rel = (e) => {
+    if (!st.drag) return;
+    st.drag = false;
+    pet.style.cursor = 'grab';
+    try { pet.releasePointerCapture(e.pointerId); } catch {}
+    if (!st.moved) {
+      st.fall = true;
+      st.vy = -240;
+      say(EMOTIONS[Math.floor(Math.random() * EMOTIONS.length)]);
+    } else if (st.yOffset < -2) {
+      st.fall = true;
+      st.vy = 0;
+    } else {
+      st.yOffset = 0;
+      say('✨');
+    }
+  };
+  pet.addEventListener('pointerup', rel);
+  pet.addEventListener('pointercancel', rel);
+
+  window.__qusaUpdateRei = (newCfg) => {
+    cfg = newCfg;
+    applySizeAndVis();
+  };
+
+  let last = performance.now();
+  function step(now) {
+    if (!pet.isConnected) return;
+    requestAnimationFrame(step);
+    if (document.hidden || cfg.antyEnabled === false || cfg.antyCharacter !== 'rei') return;
+    if (now - last < 32) return;
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+
+    const b = getSurfaceBounds();
+    if (!st.drag) {
+      if (st.x < b.minX) st.x = b.minX;
+      if (st.x > b.maxX) st.x = b.maxX;
+    }
+
+    let walking = false;
+    if (st.drag) {
+      // dangling while held
+    } else if (st.fall) {
+      st.vy += 1600 * dt;
+      st.yOffset += st.vy * dt;
+      if (st.yOffset >= 0) {
+        st.yOffset = 0;
+        st.squash = 0.7;
+        if (Math.abs(st.vy) > 130) st.vy = -st.vy * 0.34;
+        else { st.vy = 0; st.fall = false; say('✨'); }
+      }
+    } else if (cfg.antyRoam !== false && now > st.pauseUntil) {
+      walking = true;
+      st.phase += dt * 17.5;
+      st.x += st.vx * (0.72 + 0.45 * Math.abs(Math.sin(st.phase))) * dt;
+      if (st.x <= b.minX) { st.x = b.minX; st.vx = Math.abs(st.vx); st.dir = 1; }
+      else if (st.x >= b.maxX) { st.x = b.maxX; st.vx = -Math.abs(st.vx); st.dir = -1; }
+      if (Math.random() < 0.006) st.pauseUntil = now + 1400 + Math.random() * 1800;
+    }
+
+    st.squash = Math.max(0, st.squash - dt * 6);
+    if (now > st.nextEmo && !st.drag && !st.fall) {
+      st.nextEmo = now + 7000 + Math.random() * 6000;
+      say(EMOTIONS[Math.floor(Math.random() * EMOTIONS.length)]);
+    }
+
+    const drawY = b.groundY + st.yOffset;
+    pet.style.transform = `translate3d(${st.x.toFixed(1)}px, ${drawY.toFixed(1)}px, 0)`;
+    wrap.style.transform = `scaleX(${st.dir})`;
+    if (st.drag) {
+      const d = Math.sin(now * 0.016) * 11;
+      legL.style.transform = `rotate(${d.toFixed(1)}deg)`;
+      legR.style.transform = `rotate(${(-d).toFixed(1)}deg)`;
+      body.style.transform = 'translateY(0px)';
+      sh.style.opacity = '0.18';
+    } else if (walking) {
+      const s = Math.sin(st.phase), c = Math.cos(st.phase);
+      legL.style.transform = `translateY(${(Math.max(0, -c) * -3.5).toFixed(1)}px) rotate(${(s * 10.5).toFixed(1)}deg)`;
+      legR.style.transform = `translateY(${(Math.max(0, c) * -3.5).toFixed(1)}px) rotate(${(-s * 10.5).toFixed(1)}deg)`;
+      body.style.transform = `translateY(${(-Math.abs(s) * 2.2).toFixed(1)}px) rotate(${(c * 1.6).toFixed(1)}deg)`;
+      sh.style.opacity = '0.88';
+      sh.style.transform = `scale(${(1 - 0.08 * Math.abs(s)).toFixed(2)},1)`;
+    } else {
+      const breath = -Math.abs(Math.sin(now * 0.0024)) * 1.0;
+      legL.style.transform = 'rotate(0deg)';
+      legR.style.transform = 'rotate(0deg)';
+      body.style.transform = `translateY(${breath.toFixed(1)}px) scale(${(1 + st.squash * 0.1).toFixed(3)},${(1 - st.squash * 0.12).toFixed(3)})`;
+      const af = st.yOffset < -2 ? Math.max(0.15, 1 + st.yOffset / 140) : 1;
+      sh.style.opacity = af.toFixed(2);
+      sh.style.transform = `scale(${af.toFixed(2)},1)`;
+    }
+  }
+  requestAnimationFrame(step);
 }
 
 function initQusaCustomUI() {
@@ -3729,7 +5200,9 @@ function initQusaCustomUI() {
     injectStyles(cfg);
     updateWallpaperLayer(cfg);
     createStyleUI(cfg);
+    void loadAndApplyLyricsFont(cfg);
     initAntyMascot(cfg);
+    initReiPet(cfg);
     initWeatherEffect(cfg);
     initSpotifyIsland(cfg);
     if (window.__qusaSyncWpStatus) window.__qusaSyncWpStatus();

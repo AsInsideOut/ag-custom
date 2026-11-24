@@ -30,9 +30,15 @@ public class QusaNative {
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
     [DllImport("user32.dll")] public static extern uint MapVirtualKey(uint uCode, uint uMapType);
     [DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 
+    static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+    static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
+    const uint SWP_NOMOVE = 0x0002;
+    const uint SWP_NOSIZE = 0x0001;
+    const uint SWP_NOACTIVATE = 0x0010;
     const uint KEYEVENTF_KEYUP = 0x0002;
     const byte VK_MENU = 0x12;   // Alt
     const byte VK_SHIFT = 0x10;  // Shift
@@ -41,12 +47,19 @@ public class QusaNative {
     public static void SendSpotifyLike(IntPtr spotifyHwnd) {
         if (spotifyHwnd == IntPtr.Zero) return;
         IntPtr prevHwnd = GetForegroundWindow();
+        bool pinnedPrev = false;
+        bool wasIconic = IsIconic(spotifyHwnd);
         try {
-            if (IsIconic(spotifyHwnd)) {
-                ShowWindow(spotifyHwnd, 9); // SW_RESTORE only if minimized
+            // Keep current window (Antigravity) visually on top so Spotify never flashes over it
+            if (prevHwnd != IntPtr.Zero && prevHwnd != spotifyHwnd) {
+                SetWindowPos(prevHwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                pinnedPrev = true;
+            }
+            if (wasIconic) {
+                ShowWindow(spotifyHwnd, 4); // SW_SHOWNOACTIVATE
             }
             SetForegroundWindow(spotifyHwnd);
-            System.Threading.Thread.Sleep(150);
+            System.Threading.Thread.Sleep(100);
 
             byte scanAlt = (byte)MapVirtualKey(VK_MENU, 0);
             byte scanShift = (byte)MapVirtualKey(VK_SHIFT, 0);
@@ -55,16 +68,24 @@ public class QusaNative {
             keybd_event(VK_MENU, scanAlt, 0, UIntPtr.Zero);
             keybd_event(VK_SHIFT, scanShift, 0, UIntPtr.Zero);
             keybd_event(VK_B, scanB, 0, UIntPtr.Zero);
-            System.Threading.Thread.Sleep(40);
+            System.Threading.Thread.Sleep(35);
             keybd_event(VK_B, scanB, KEYEVENTF_KEYUP, UIntPtr.Zero);
             keybd_event(VK_SHIFT, scanShift, KEYEVENTF_KEYUP, UIntPtr.Zero);
             keybd_event(VK_MENU, scanAlt, KEYEVENTF_KEYUP, UIntPtr.Zero);
 
-            System.Threading.Thread.Sleep(110);
+            System.Threading.Thread.Sleep(70);
+            if (wasIconic) {
+                ShowWindow(spotifyHwnd, 7); // SW_SHOWMINNOACTIVE
+            }
             if (prevHwnd != IntPtr.Zero && prevHwnd != spotifyHwnd) {
                 SetForegroundWindow(prevHwnd);
             }
-        } catch {}
+        } catch {
+        } finally {
+            if (pinnedPrev) {
+                SetWindowPos(prevHwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+        }
     }
 
     static IAudioMeterInformation _meter;
@@ -177,6 +198,9 @@ function Get-SpotifyStateJson {
     $status = 'Paused'
     $repeat = 'None'
     $cover = ''
+    $position = 0.0
+    $duration = 0.0
+    $timelineValid = $false
 
     # Fast path: Spotify MainWindowTitle ("Artist - Track") updates instantaneously (<50ms) when playing
     if ($spWin.MainWindowTitle -and $spWin.MainWindowTitle -ne 'Spotify' -and $spWin.MainWindowTitle -ne 'Spotify Free' -and $spWin.MainWindowTitle -ne 'Spotify Premium') {
@@ -196,11 +220,36 @@ function Get-SpotifyStateJson {
             if ($null -ne $pb.AutoRepeatMode) { $repeat = [string]$pb.AutoRepeatMode }
         }
         $info = Await ($s.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
+        $infoTitle = if ($info -and $info.Title) { [string]$info.Title } else { '' }
+        $infoArtist = if ($info -and $info.Artist) { [string]$info.Artist } else { '' }
+        $titleMatchesGsmtc = (-not $title) -or (-not $infoTitle) -or ($title.ToLowerInvariant() -eq $infoTitle.ToLowerInvariant())
         if ($info) {
-            if (-not $title -and $info.Title) { $title = [string]$info.Title }
-            if (-not $artist -and $info.Artist) { $artist = [string]$info.Artist }
+            if (-not $title -and $infoTitle) { $title = $infoTitle }
+            if (-not $artist -and $infoArtist) { $artist = $infoArtist }
             $thumbKey = "$title|$artist"
-            if ($info.Thumbnail) { $cover = Get-ThumbnailDataUrl $info.Thumbnail $thumbKey }
+            if ($info.Thumbnail -and $titleMatchesGsmtc) { $cover = Get-ThumbnailDataUrl $info.Thumbnail $thumbKey }
+        }
+        if ($titleMatchesGsmtc) {
+            try {
+                $tl = $s.GetTimelineProperties()
+                if ($tl) {
+                    $dur = $tl.EndTime.TotalSeconds
+                    $pos = $tl.Position.TotalSeconds
+                    if ($dur -gt 1) {
+                        $duration = [math]::Round($dur, 3)
+                        $timelineValid = $true
+                        if ($status -eq 'Playing' -and $tl.LastUpdatedTime.Year -gt 2000) {
+                            $age = ([DateTimeOffset]::UtcNow - $tl.LastUpdatedTime).TotalSeconds
+                            if ($age -gt 0 -and $age -lt 300) {
+                                $pos = $pos + $age
+                            }
+                        }
+                        if ($pos -lt 0) { $pos = 0 }
+                        if ($pos -gt $dur) { $pos = $dur }
+                        $position = [math]::Round($pos, 3)
+                    }
+                }
+            } catch {}
         }
     }
 
@@ -213,6 +262,9 @@ function Get-SpotifyStateJson {
         status = $status
         repeat = $repeat
         cover = $cover
+        position = $position
+        duration = $duration
+        timelineValid = $timelineValid
         peaks = @([math]::Round($p[0], 3), [math]::Round($p[1], 3), [math]::Round($p[2], 3))
     }
     return ($obj | ConvertTo-Json -Compress)
@@ -246,6 +298,16 @@ function Invoke-SpotifyAction([string]$cmd) {
             $sp = Get-Process -Name 'Spotify' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
             if ($sp) {
                 [QusaNative]::SendSpotifyLike($sp.MainWindowHandle)
+            }
+        }
+        default {
+            if ($s -and $cmd.StartsWith('seek:')) {
+                try {
+                    $sec = [double]::Parse($cmd.Substring(5), [System.Globalization.CultureInfo]::InvariantCulture)
+                    if ($sec -lt 0) { $sec = 0 }
+                    $ticks = [long]($sec * 10000000)
+                    Await ($s.TryChangePlaybackPositionAsync($ticks)) ([bool]) | Out-Null
+                } catch {}
             }
         }
     }

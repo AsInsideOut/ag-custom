@@ -22,6 +22,11 @@ electron_1.contextBridge.exposeInMainWorld('qusaPersist', {
     spotifyPeak: () => electron_1.ipcRenderer.invoke('qusa:spotify-peak'),
     spotifyAction: (cmd) => electron_1.ipcRenderer.invoke('qusa:spotify-action', cmd),
     spotifyOpen: (uri) => electron_1.ipcRenderer.invoke('qusa:spotify-open', uri),
+    spotifyLyrics: (payload) => electron_1.ipcRenderer.invoke('qusa:spotify-lyrics', payload),
+    spotifyCover: (payload) => electron_1.ipcRenderer.invoke('qusa:spotify-cover', payload),
+    loadLyricsFont: () => electron_1.ipcRenderer.invoke('qusa:load-lyrics-font'),
+    saveLyricsFont: (payload) => electron_1.ipcRenderer.invoke('qusa:save-lyrics-font', payload),
+    clearLyricsFont: () => electron_1.ipcRenderer.invoke('qusa:clear-lyrics-font'),
 });
 """
 
@@ -81,6 +86,39 @@ UTILS_HOOK = """    if (!global.__qusaIpcRegistered) {
                     return true;
                 } catch (e) { console.error('[Qusa] clear-wallpaper error:', e); return false; }
             });
+            const qFontBin = qPath.join(qDir, 'custom-lyrics-font.bin');
+            const qFontMeta = qPath.join(qDir, 'custom-lyrics-font.meta.json');
+            qIpc.handle('qusa:load-lyrics-font', () => {
+                try {
+                    if (qFs.existsSync(qFontBin)) {
+                        const meta = qFs.existsSync(qFontMeta) ? JSON.parse(qFs.readFileSync(qFontMeta, 'utf8')) : {};
+                        const buf = qFs.readFileSync(qFontBin);
+                        return { bytes: new Uint8Array(buf), name: meta.name || 'custom.ttf', builtin: false };
+                    }
+                    const builtinFont = qPath.join(__dirname, 'qusa_lyrics_font.ttf');
+                    if (qFs.existsSync(builtinFont)) {
+                        const buf = qFs.readFileSync(builtinFont);
+                        return { bytes: new Uint8Array(buf), name: 'aahigherup.ttf', builtin: true };
+                    }
+                } catch (e) { console.error('[Qusa] load-lyrics-font error:', e); }
+                return null;
+            });
+            qIpc.handle('qusa:save-lyrics-font', (_ev, payload) => {
+                try {
+                    ensureDir();
+                    const buf = Buffer.from(payload.bytes);
+                    qFs.writeFileSync(qFontBin, buf);
+                    qFs.writeFileSync(qFontMeta, JSON.stringify({ name: payload.name || 'custom.ttf' }), 'utf8');
+                    return true;
+                } catch (e) { console.error('[Qusa] save-lyrics-font error:', e); return false; }
+            });
+            qIpc.handle('qusa:clear-lyrics-font', () => {
+                try {
+                    if (qFs.existsSync(qFontBin)) qFs.unlinkSync(qFontBin);
+                    if (qFs.existsSync(qFontMeta)) qFs.unlinkSync(qFontMeta);
+                    return true;
+                } catch (e) { console.error('[Qusa] clear-lyrics-font error:', e); return false; }
+            });
             const qTransFile = qPath.join(qDir, 'custom-ui-trans-cache.json');
             const qTransCache = new Map();
             try {
@@ -106,11 +144,11 @@ UTILS_HOOK = """    if (!global.__qusaIpcRegistered) {
             const qHttps = require('https');
             const httpGetJson = (url) => new Promise((resolve) => {
                 const req = qHttps.get(url, { timeout: 6000, headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
-                    let body = '';
-                    res.on('data', (chunk) => { body += chunk; });
+                    const chunks = [];
+                    res.on('data', (chunk) => { chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)); });
                     res.on('end', () => {
                         if (res.statusCode !== 200) return resolve(null);
-                        try { resolve(JSON.parse(body)); } catch { resolve(null); }
+                        try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch { resolve(null); }
                     });
                 });
                 req.on('error', () => resolve(null));
@@ -284,7 +322,8 @@ UTILS_HOOK = """    if (!global.__qusaIpcRegistered) {
             qIpc.handle('qusa:spotify-peak', () => sendSpotifyCmd('peak'));
             qIpc.handle('qusa:spotify-action', (_ev, cmd) => {
                 const allowed = ['playpause', 'next', 'prev', 'repeat', 'like'];
-                if (!allowed.includes(cmd)) return { running: false };
+                const isSeek = typeof cmd === 'string' && /^seek:\\d+(?:\\.\\d+)?$/.test(cmd);
+                if (!allowed.includes(cmd) && !isSeek) return { running: false };
                 return sendSpotifyCmd(cmd);
             });
             qIpc.handle('qusa:spotify-open', (_ev, uri) => {
@@ -296,6 +335,193 @@ UTILS_HOOK = """    if (!global.__qusaIpcRegistered) {
                     }
                 } catch {}
                 return false;
+            });
+            const qLyricsCache = new Map();
+            qIpc.handle('qusa:spotify-lyrics', async (_ev, payload) => {
+                try {
+                    const artist = String((payload && payload.artist) || '').trim();
+                    const title = String((payload && payload.title) || '').trim();
+                    const dur = Math.round(Number((payload && payload.duration) || 0));
+                    if (!title && !artist) return { synced: '', plain: '', duration: 0, cover: '' };
+                    const key = (artist + '|' + title + '|' + (dur > 0 ? Math.round(dur / 3) : 0)).toLowerCase();
+                    if (qLyricsCache.has(key)) return qLyricsCache.get(key);
+
+                    const tLow = title.toLowerCase();
+                    const aLow = artist.toLowerCase();
+
+                    const fetchLyrics = async () => {
+                        const badVerRe = /\\b(slowed|sped\\s*up|speed\\s*up|nightcore|reverb|8d|remix|karaoke|mashup|pitched|daycore)\\b/i;
+                        const origHasBad = badVerRe.test(title);
+                        const isVersionClean = (item) => {
+                            if (origHasBad) return true;
+                            const txt = String((item && item.trackName) || '') + ' ' + String((item && item.albumName) || '');
+                            return !badVerRe.test(txt);
+                        };
+                        const durMatches = (item, tol) => {
+                            if (dur <= 1) return true;
+                            const itDur = Number((item && item.duration) || 0);
+                            if (itDur <= 1) return false;
+                            return Math.abs(itDur - dur) <= tol;
+                        };
+                        const pickBestSynced = (list, tol) => {
+                            if (!Array.isArray(list) || list.length === 0) return null;
+                            const valid = list.filter((it) => it && it.syncedLyrics && isVersionClean(it) && durMatches(it, tol));
+                            if (valid.length === 0) return null;
+                            const scored = valid.map((it) => {
+                                let sc = 0;
+                                const itT = String(it.trackName || '').toLowerCase();
+                                const itA = String(it.artistName || '').toLowerCase();
+                                if (tLow && itT === tLow) sc += 40;
+                                else if (tLow && (itT.includes(tLow) || tLow.includes(itT))) sc += 20;
+                                if (aLow && itA === aLow) sc += 35;
+                                else if (aLow && (itA.includes(aLow) || aLow.includes(itA))) sc += 16;
+                                const itDur = Number(it.duration || 0);
+                                if (dur > 1 && itDur > 1) sc += Math.max(0, 30 - Math.abs(itDur - dur) * 10);
+                                return { it, sc };
+                            }).sort((a, b) => b.sc - a.sc);
+                            return scored[0] ? scored[0].it : null;
+                        };
+
+                        let plainFallback = '';
+                        let plainDur = 0;
+                        const collectPlain = (list) => {
+                            if (plainFallback || !Array.isArray(list)) return;
+                            const p = list.find((it) => it && it.plainLyrics && isVersionClean(it));
+                            if (p) { plainFallback = p.plainLyrics; plainDur = Number(p.duration || 0); }
+                        };
+
+                        // 1. Exact get with strict duration check (+-2.5s)
+                        if (artist && title) {
+                            const durParam = dur > 1 ? '&duration=' + dur : '';
+                            const exact = await httpGetJson('https://lrclib.net/api/get?artist_name=' + encodeURIComponent(artist) + '&track_name=' + encodeURIComponent(title) + durParam);
+                            if (exact && isVersionClean(exact)) {
+                                if (exact.syncedLyrics && durMatches(exact, 2.5)) {
+                                    return { synced: exact.syncedLyrics, plain: exact.plainLyrics || '', duration: Number(exact.duration || 0) };
+                                }
+                                if (exact.plainLyrics) { plainFallback = exact.plainLyrics; plainDur = Number(exact.duration || 0); }
+                            }
+                        }
+
+                        // 2. Structured search (track_name + artist_name)
+                        let allLists = [];
+                        if (artist && title) {
+                            const list1 = await httpGetJson('https://lrclib.net/api/search?track_name=' + encodeURIComponent(title) + '&artist_name=' + encodeURIComponent(artist));
+                            if (Array.isArray(list1)) allLists = allLists.concat(list1);
+                            const b1 = pickBestSynced(list1, 2.5);
+                            if (b1) return { synced: b1.syncedLyrics, plain: b1.plainLyrics || '', duration: Number(b1.duration || 0) };
+                            collectPlain(list1);
+                        }
+
+                        // 3. Free-text search (artist + title)
+                        const qStr = (artist ? artist + ' ' : '') + title;
+                        const list2 = await httpGetJson('https://lrclib.net/api/search?q=' + encodeURIComponent(qStr));
+                        if (Array.isArray(list2)) allLists = allLists.concat(list2);
+                        const b2 = pickBestSynced(list2, 2.5);
+                        if (b2) return { synced: b2.syncedLyrics, plain: b2.plainLyrics || '', duration: Number(b2.duration || 0) };
+                        collectPlain(list2);
+
+                        // 4. Clean title fallback (strip "(feat...)", "- Remastered", etc.)
+                        const cleanTitle = title.replace(/\\s*[(\\[].*?[)\\]]/g, '').replace(/\\s*-\\s*(remaster|radio|single|edit|version).*$/i, '').trim();
+                        if (cleanTitle && cleanTitle.toLowerCase() !== tLow) {
+                            const list3 = await httpGetJson('https://lrclib.net/api/search?track_name=' + encodeURIComponent(cleanTitle) + (artist ? '&artist_name=' + encodeURIComponent(artist) : ''));
+                            if (Array.isArray(list3)) allLists = allLists.concat(list3);
+                            const b3 = pickBestSynced(list3, 2.5);
+                            if (b3) return { synced: b3.syncedLyrics, plain: b3.plainLyrics || '', duration: Number(b3.duration || 0) };
+                            collectPlain(list3);
+                        }
+
+                        // 5. Relaxed duration tolerance (+-6s, still strictly excluding slowed/sped-up/remix) for slight outro silence differences
+                        const bRelaxed = pickBestSynced(allLists, 6.0);
+                        if (bRelaxed) return { synced: bRelaxed.syncedLyrics, plain: bRelaxed.plainLyrics || '', duration: Number(bRelaxed.duration || 0) };
+
+                        // 6. Fallback plain lyrics via lyrics.ovh if LRCLIB had nothing
+                        if (!plainFallback && artist && title) {
+                            const ovh = await httpGetJson('https://api.lyrics.ovh/v1/' + encodeURIComponent(artist) + '/' + encodeURIComponent(cleanTitle || title));
+                            if (ovh && ovh.lyrics) plainFallback = String(ovh.lyrics);
+                        }
+
+                        return { synced: '', plain: plainFallback, duration: plainDur };
+                    };
+
+                    const lyr = await fetchLyrics();
+                    const out = {
+                        synced: lyr.synced || '',
+                        plain: lyr.plain || '',
+                        duration: lyr.duration || 0,
+                    };
+                    if (qLyricsCache.size > 150) {
+                        const firstKey = qLyricsCache.keys().next().value;
+                        if (firstKey !== undefined) qLyricsCache.delete(firstKey);
+                    }
+                    qLyricsCache.set(key, out);
+                    return out;
+                } catch {
+                    return { synced: '', plain: '', duration: 0 };
+                }
+            });
+            const qCoverCache = new Map();
+            qIpc.handle('qusa:spotify-cover', async (_ev, payload) => {
+                try {
+                    const artist = String((payload && payload.artist) || '').trim();
+                    const title = String((payload && payload.title) || '').trim();
+                    if (!title && !artist) return { cover: '', duration: 0 };
+                    const key = (artist + '|' + title).toLowerCase();
+                    if (qCoverCache.has(key)) return qCoverCache.get(key);
+                    const tLow = title.toLowerCase();
+                    const aLow = artist.toLowerCase();
+                    const qStr = (artist ? artist + ' ' : '') + title;
+                    let out = { cover: '', duration: 0 };
+                    try {
+                        const dz = await httpGetJson('https://api.deezer.com/search?limit=5&q=' + encodeURIComponent(qStr));
+                        if (dz && Array.isArray(dz.data) && dz.data.length > 0) {
+                            const best = dz.data.map((it) => {
+                                let sc = 0;
+                                const itT = String((it && it.title) || '').toLowerCase();
+                                const itA = String((it && it.artist && it.artist.name) || '').toLowerCase();
+                                if (tLow && itT === tLow) sc += 35;
+                                else if (tLow && (itT.includes(tLow) || tLow.includes(itT))) sc += 16;
+                                if (aLow && itA === aLow) sc += 30;
+                                else if (aLow && (itA.includes(aLow) || aLow.includes(itA))) sc += 14;
+                                return { it, sc };
+                            }).sort((a, b) => b.sc - a.sc)[0];
+                            if (best && best.sc >= 14 && best.it && best.it.album) {
+                                const cov = best.it.album.cover_big || best.it.album.cover_medium || '';
+                                if (cov) out = { cover: cov, duration: Number(best.it.duration || 0) };
+                            }
+                        }
+                    } catch {}
+                    if (!out.cover) {
+                        try {
+                            const itunes = await httpGetJson('https://itunes.apple.com/search?entity=song&limit=5&term=' + encodeURIComponent(qStr));
+                            if (itunes && Array.isArray(itunes.results) && itunes.results.length > 0) {
+                                const best = itunes.results.map((it) => {
+                                    let sc = 0;
+                                    const itT = String((it && it.trackName) || '').toLowerCase();
+                                    const itA = String((it && it.artistName) || '').toLowerCase();
+                                    if (tLow && itT === tLow) sc += 35;
+                                    else if (tLow && (itT.includes(tLow) || tLow.includes(itT))) sc += 16;
+                                    if (aLow && itA === aLow) sc += 30;
+                                    else if (aLow && (itA.includes(aLow) || aLow.includes(itA))) sc += 14;
+                                    return { it, sc };
+                                }).sort((a, b) => b.sc - a.sc)[0];
+                                if (best && best.sc >= 14 && best.it && best.it.artworkUrl100) {
+                                    out = {
+                                        cover: String(best.it.artworkUrl100).replace('100x100bb', '600x600bb'),
+                                        duration: Math.round(Number(best.it.trackTimeMillis || 0) / 1000),
+                                    };
+                                }
+                            }
+                        } catch {}
+                    }
+                    if (qCoverCache.size > 200) {
+                        const firstKey = qCoverCache.keys().next().value;
+                        if (firstKey !== undefined) qCoverCache.delete(firstKey);
+                    }
+                    qCoverCache.set(key, out);
+                    return out;
+                } catch {
+                    return { cover: '', duration: 0 };
+                }
             });
         } catch (err) {
             console.error('[Qusa] Failed to register IPC:', err);
@@ -324,6 +550,18 @@ UTILS_HOOK = """    if (!global.__qusaIpcRegistered) {
         } catch (err) {
             console.error('[Qusa] Failed to inject custom UI:', err);
         }
+    });
+    hubContents.on('did-frame-finish-load', (_ev, isMainFrame, frameProcessId, frameRoutingId) => {
+        if (isMainFrame) return;
+        try {
+            const { webFrameMain } = require('electron');
+            const frame = webFrameMain.fromId(frameProcessId, frameRoutingId);
+            if (!frame) return;
+            const u = String(frame.url || '');
+            if (!u.startsWith('plugin://') && !u.startsWith('http://localhost:') && !u.startsWith('http://127.0.0.1:')) return;
+            const sidecarJs = "(() => { if (document.getElementById('qusa-sidecar-style')) return; const st = document.createElement('style'); st.id = 'qusa-sidecar-style'; st.textContent = 'html, body, #root, #app, #root > div, main { background: transparent !important; background-color: transparent !important; }'; (document.head || document.documentElement).appendChild(st); const clean = () => { document.querySelectorAll('div, main, section, aside, header, nav').forEach((el) => { const cs = getComputedStyle(el); const m = cs.backgroundColor && cs.backgroundColor.match(/^rgba?\\\\(\\\\s*(\\\\d+),\\\\s*(\\\\d+),\\\\s*(\\\\d+)(?:,\\\\s*([\\\\d.]+))?\\\\s*\\\\)/); if (!m) return; const r = +m[1], g = +m[2], b = +m[3], a = m[4] === undefined ? 1 : +m[4]; if (a >= 0.85 && Math.max(r,g,b) - Math.min(r,g,b) <= 18 && r <= 48 && g <= 48 && b <= 48) { const rect = el.getBoundingClientRect(); if (rect.width >= 180 && rect.height >= 120) el.style.setProperty('background-color', 'transparent', 'important'); } }); }; clean(); setTimeout(clean, 400); setTimeout(clean, 1400); new MutationObserver(() => clean()).observe(document.documentElement, { childList: true, subtree: true }); })();";
+            void frame.executeJavaScript(sidecarJs).catch(() => {});
+        } catch (_e) {}
     });
 """
 
@@ -402,11 +640,18 @@ def patch_asar(src_path: str, ui_js_path: str, out_path: str, force: bool = Fals
     with open(ui_js_path, "rb") as f:
         qusa_bytes = f.read()
 
-    sp_bridge_path = os.path.join(os.path.dirname(os.path.abspath(ui_js_path)), "qusa_spotify_bridge.ps1")
+    base_dir = os.path.dirname(os.path.abspath(ui_js_path))
+    sp_bridge_path = os.path.join(base_dir, "qusa_spotify_bridge.ps1")
     sp_bridge_bytes = None
     if os.path.exists(sp_bridge_path):
         with open(sp_bridge_path, "rb") as f:
             sp_bridge_bytes = f.read()
+
+    lyrics_font_bytes = None
+    default_font_path = os.path.join(base_dir, "assets", "aahigherup.ttf")
+    if os.path.exists(default_font_path):
+        with open(default_font_path, "rb") as f:
+            lyrics_font_bytes = f.read()
 
     preload_raw = get_file_bytes(header, old_payload, ["dist", "preload.js"])
     utils_raw = get_file_bytes(header, old_payload, ["dist", "utils.js"])
@@ -452,6 +697,12 @@ def patch_asar(src_path: str, ui_js_path: str, out_path: str, force: bool = Fals
             "offset": "0",
             "integrity": make_integrity(sp_bridge_bytes),
         }
+    if lyrics_font_bytes is not None:
+        header["files"]["dist"]["files"]["qusa_lyrics_font.ttf"] = {
+            "size": len(lyrics_font_bytes),
+            "offset": "0",
+            "integrity": make_integrity(lyrics_font_bytes),
+        }
 
     chunks = []
     cur_offset = 0
@@ -469,6 +720,9 @@ def patch_asar(src_path: str, ui_js_path: str, out_path: str, force: bool = Fals
                 node["integrity"] = make_integrity(data)
             elif path_parts == ["dist", "qusa_spotify_bridge.ps1"] and sp_bridge_bytes is not None:
                 data = sp_bridge_bytes
+                node["integrity"] = make_integrity(data)
+            elif path_parts == ["dist", "qusa_lyrics_font.ttf"] and lyrics_font_bytes is not None:
+                data = lyrics_font_bytes
                 node["integrity"] = make_integrity(data)
             elif path_parts == ["dist", "utils.js"]:
                 data = patched_utils_bytes
